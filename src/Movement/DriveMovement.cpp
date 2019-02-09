@@ -169,48 +169,6 @@ void DriveMovement::PrepareDeltaAxis(const DDA& dda, const PrepParams& params)
 		twoDistanceToStopTimesCsquaredDivD = isquare64(params.topSpeedTimesCdivD) + roundU64((params.decelStartDistance * (StepTimer::StepClockRateSquared * 2))/dda.deceleration);
 	}
 }
-/*
-float DriveMovement::CalcExtrusionRequired(const DDA& dda, const PrepParams& params, Move& move, float speedChange, bool doCompensation)
-{
-	float dv = dda.directionVector[drive];
-	float extrusionRequired = dda.totalDistance * dv;
-	const size_t extruder = drive - reprap.GetGCodes().GetTotalAxes();
-
-	#if SUPPORT_NONLINEAR_EXTRUSION
-		// Add the nonlinear extrusion correction to totalExtrusion
-		if (dda.isPrintingMove)
-		{
-			float a, b, limit;
-			if (reprap.GetPlatform().GetExtrusionCoefficients(extruder, a, b, limit))
-			{
-				const float averageExtrusionSpeed = (extrusionRequired * StepTimer::StepClockRate)/dda.clocksNeeded;
-				const float factor = 1.0 + min<float>((averageExtrusionSpeed * a) + (averageExtrusionSpeed * averageExtrusionSpeed * b), limit);
-				extrusionRequired *= factor;
-			}
-		}
-	#endif
-	const float currentExtrusionPending = extrusionPending * max<float>(1.0, min<float>(0.1, fabsf(extrusionRequired / extrusionPending)));
-	extrusionPending -= currentExtrusionPending;
-	extrusionRequired += currentExtrusionPending;
-	return extrusionRequired;
-}
-float DriveMovement::CalcPressureAdvanceFactor(const DDA& dda, const PrepParams& params, Move& move, float speedChange, bool doCompensation)
-{
-	float dv = dda.directionVector[drive];
-	float extrusionRequired = dda.totalDistance * dv;
-	const size_t extruder = drive - reprap.GetGCodes().GetTotalAxes();
-
-	if (doCompensation && direction) // Don't apply PA for tiny pressure changes
-	{
-		// Calculate the pressure advance parameters
-		float compensationTime = reprap.GetPlatform().GetPressureAdvance(extruder);
-		const float t = min<float>(1.0, max<float>(0.0, fsquare(extrusionRequired - extruderPressure) * 20.0));
-		compensationTime = t * compensationTime;
-		return t;
-	}
-	return 0.0;
-}*/
-// Prepare this DM for an extruder move
 void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float speedChange, bool doCompensation)
 {
 	// Calculate the requested extrusion amount and a few other things
@@ -234,7 +192,6 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 	float extrusionPending = dda.prev->GetExtrusionPending(extruder);
 	const float moveTime = dda.GetClocksNeeded() / (float)StepTimer::StepClockRate;
 	const float timeSinceMoveStarted = (dda.GetClocksNeeded() - dda.GetTimeLeft()) / (float)StepTimer::StepClockRate;
-	const float moveProportionDone = timeSinceMoveStarted / moveTime;
 	// Add on any fractional extrusion pending from the previous move
 	const float currentExtrusionPending = extrusionPending * max<float>(0.0, min<float>(0.25, fabsf(extrusionRequired / extrusionPending)));
 	extrusionPending -= currentExtrusionPending;
@@ -277,7 +234,6 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 		// Calculate the acceleration phase parameters
 		mp.cart.accelStopStep = (uint32_t)(dda.accelDistance * effectiveStepsPerMm) + 1;
 	}
-	//extrusionRequired += extrusionPending;
 	int32_t netSteps = (int32_t)(extrusionRequired * rawStepsPerMm);
 	extrusionPending += extrusionRequired - (float)netSteps/rawStepsPerMm;
 	dda.SetExtrusionPending(extruder, extrusionPending);
