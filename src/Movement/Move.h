@@ -143,6 +143,7 @@ public:
 	void AdjustLeadscrews(const floatc_t corrections[]);							// Called by some Kinematics classes to adjust the leadscrews
 
 	int32_t GetAccumulatedExtrusion(size_t extruder, bool& nonPrinting);			// Return and reset the accumulated extrusion amount
+	float &GetExtrusionPending(size_t extruder) { return extrusionPending[extruder]; }
 
 	bool WriteResumeSettings(FileStore *f) const;									// Write settings for resuming the print
 

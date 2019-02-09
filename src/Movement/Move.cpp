@@ -323,7 +323,7 @@ void Move::Spin()
 #endif
 			   )
 			{
-				dda->Prepare(simulationMode, extrusionPending);
+				dda->Prepare(simulationMode);
 			}
 			if (dda->GetState() == DDA::frozen)
 			{
@@ -387,7 +387,7 @@ void Move::Spin()
 #endif
 			   )
 			{
-				cdda->Prepare(simulationMode, extrusionPending);
+				cdda->Prepare(simulationMode);
 			}
 			preparedTime += cdda->GetTimeLeft();
 			++preparedCount;

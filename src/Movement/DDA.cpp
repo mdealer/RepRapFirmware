@@ -243,6 +243,10 @@ void DDA::Init()
 	endCoordinatesValid = false;
 	virtualExtruderPosition = 0;
 	filePos = noFilePosition;
+	for (size_t d = 0; d < MaxExtruders; ++d)
+	{
+		extrusionPending[d] = 0.0;
+	}
 
 #if SUPPORT_LASER || SUPPORT_IOBITS
 	laserPwmOrIoBits.Clear();
@@ -328,6 +332,7 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 		}
 		else
 		{
+			extrusionPending[drive - numTotalAxes] = 0.0;
 			// It's an extruder drive. We defer calculating the steps because they may be affected by nonlinear extrusion, which we can't calculate until we
 			// know the speed of the move, and because extruder movement is relative so we need to accumulate fractions of a whole step between moves.
 			const float movement = nextMove.coords[drive];
@@ -351,21 +356,9 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 			pdm->totalSteps = labs(delta);				// for now this is the number of net steps, but gets adjusted later if there is a reverse in direction
 			pdm->direction = (delta >= 0);				// for now this is the direction of net movement, but gets adjusted later if it is a delta movement
 
-			if (drive >= numTotalAxes)
+			if (drive < numTotalAxes)
 			{
-				// It's an extruder movement
-				if (xyMoving && nextMove.usePressureAdvance)
-				{
-					const float compensationTime = reprap.GetPlatform().GetPressureAdvance(drive - numTotalAxes);
-					if (compensationTime > 0.0)
-					{
-						// Compensation causes instant velocity changes equal to acceleration * k, so we may need to limit the acceleration
-						accelerations[drive] = min<float>(accelerations[drive], reprap.GetPlatform().GetInstantDv(drive)/compensationTime);
-					}
-				}
-			}
-			else
-			{
+
 				axesMoving = true;
 			}
 		}
@@ -462,6 +455,8 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 	float normalisedDirectionVector[MaxTotalDrivers];		// used to hold a unit-length vector in the direction of motion
 	memcpy(normalisedDirectionVector, directionVector, sizeof(normalisedDirectionVector));
 	Absolute(normalisedDirectionVector, MaxTotalDrivers);
+	if (usePressureAdvance)
+		CalcPressureAdvance(accelerations, normalisedDirectionVector);
 	acceleration = maxAcceleration = VectorBoxIntersection(normalisedDirectionVector, accelerations, MaxTotalDrivers);
 	if (xyMoving)											// apply M204 acceleration limits to XY moves
 	{
@@ -517,11 +512,88 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 		prev->targetNextSpeed = min<float>(sqrtf(deceleration * totalDistance * 2.0), requestedSpeed);
 		DoLookahead(prev);
 		startSpeed = prev->endSpeed;
+		if (usePressureAdvance)
+		{
+			CalcPressureAdvance();
+			RecalculateMove();
+			prev->targetNextSpeed = min<float>(sqrtf(deceleration * totalDistance * 2.0), startSpeed);
+			DoLookahead(prev);
+			startSpeed = prev->endSpeed;
+		}
 	}
-
+	if (usePressureAdvance)
+		CalcPressureAdvance();
 	RecalculateMove();
 	state = provisional;
 	return true;
+}
+
+bool DDA::CalcPressureAdvance()
+{
+	const float * const normalAccelerations = reprap.GetPlatform().Accelerations();
+	float accelerations[MaxTotalDrivers];
+	for (size_t i = 0; i < MaxTotalDrivers; ++i)
+		accelerations[i] = normalAccelerations[i];
+	float normalisedDirectionVector[MaxTotalDrivers];		// used to hold a unit-length vector in the direction of motion
+	memcpy(normalisedDirectionVector, directionVector, sizeof(normalisedDirectionVector));
+	Absolute(normalisedDirectionVector, MaxTotalDrivers);
+	bool adjusted = CalcPressureAdvance(accelerations, normalisedDirectionVector);
+	float newAcceleration = VectorBoxIntersection(normalisedDirectionVector, accelerations, MaxTotalDrivers);
+	if (xyMoving)											// apply M204 acceleration limits to XY moves
+	{
+		newAcceleration = min<float>(newAcceleration, (isPrintingMove) ? reprap.GetMove().GetMaxPrintingAcceleration() : reprap.GetMove().GetMaxTravelAcceleration());
+	}
+	// Pressure advance may only reduce acceleration
+	if (newAcceleration < acceleration)
+		acceleration = newAcceleration;
+	if (newAcceleration < deceleration)
+		deceleration = newAcceleration;
+	return adjusted;
+}
+
+bool DDA::CalcPressureAdvance(float accelerations[], const float normalisedDirectionVector[])
+{
+	const size_t numTotalAxes = reprap.GetGCodes().GetTotalAxes();
+	bool adjusted = false;
+	for (size_t drive = numTotalAxes; drive < MaxTotalDrivers; drive++)
+	{
+		if (/*directionVector[drive] != 0.0 && */isPrintingMove && usePressureAdvance)
+		{
+			float compensationTime = reprap.GetPlatform().GetPressureAdvance(drive - numTotalAxes);
+			if (compensationTime > 0.0)
+			{
+				const float dv = directionVector[drive];
+				float extrusionCompensation = (endSpeed - startSpeed) * compensationTime * dv;
+				float extrusionRequired = dv * totalDistance + extrusionCompensation;
+				float prevExtrusionCompensation = (prev->endSpeed - prev->startSpeed) * compensationTime * prev->directionVector[drive];
+				float prevExtrusionRequired = prev->directionVector[drive] * prev->totalDistance + extrusionCompensation;
+				const float moveTime = GetClocksNeeded() / (float)StepTimer::StepClockRate;
+				float t, maxDv;
+				if ((isPrintingMove && !prev->isPrintingMove) || (!isPrintingMove && prev->isPrintingMove))
+				{
+					t = 1.0;
+					maxDv = reprap.GetPlatform().Acceleration(drive);
+				}
+				else
+				{
+					t = 1.0 + max<float>(0.0, min<float>(1.0, fabs(extrusionRequired) / moveTime / reprap.GetPlatform().GetInstantDv(drive) - 1.0));
+					maxDv = reprap.GetPlatform().GetInstantDv(drive);
+				}
+				accelerations[drive] = min<float>(accelerations[drive], min<float>(maxDv, reprap.GetPlatform().GetInstantDv(drive) / t));
+				adjusted = true;
+				//debugPrintf("mt=%f t=%f ec=%f er=%f \n", (double)moveTime, (double)t, (double)extrusionCompensation, (double)extrusionRequired);
+
+			}
+		}
+	}
+	return adjusted;
+	/*
+	acceleration = maxAcceleration = VectorBoxIntersection(normalisedDirectionVector, accelerations, MaxTotalDrivers);
+	if (xyMoving)											// apply M204 acceleration limits to XY moves
+	{
+		acceleration = min<float>(acceleration, (isPrintingMove) ? reprap.GetMove().GetMaxPrintingAcceleration() : reprap.GetMove().GetMaxTravelAcceleration());
+	}
+	deceleration = acceleration;*/
 }
 
 // Set up a raw (unmapped) motor move returning true if the move does anything
@@ -940,7 +1012,7 @@ void DDA::RecalculateMove()
 					reprap.GetMove().RecordLookaheadError();
 					if (reprap.Debug(moduleMove))
 					{
-						debugPrintf("DDA.cpp(%d) na=%f", __LINE__, (double)newAcceleration);
+						debugPrintf("DDA.cpp(%d) na=%f ", __LINE__, (double)(newAcceleration / acceleration));
 						DebugPrint();
 					}
 				}
@@ -952,13 +1024,13 @@ void DDA::RecalculateMove()
 				decelDistance = totalDistance;
 				topSpeed = startSpeed;
 				const float newDeceleration = (fsquare(startSpeed) - fsquare(endSpeed))/(2 * totalDistance);
-				if (newDeceleration > 1.02 * deceleration)
+				if (newDeceleration > (usePressureAdvance ? 2.01 : 1.02) * deceleration)
 				{
 					// The deceleration increase is greater than we expect from rounding error, so record an error
 					reprap.GetMove().RecordLookaheadError();
 					if (reprap.Debug(moduleMove))
 					{
-						debugPrintf("DDA.cpp(%d) nd=%f", __LINE__, (double)newDeceleration);
+						debugPrintf("DDA.cpp(%d) nd=%f ", __LINE__, (double)(newDeceleration / deceleration));
 						DebugPrint();
 					}
 				}
@@ -983,6 +1055,11 @@ void DDA::RecalculateMove()
 	// We need to set the number of clocks needed here because we use it before the move has been frozen
 	const float totalTime = (topSpeed - startSpeed)/acceleration + (topSpeed - endSpeed)/deceleration + (totalDistance - accelDistance - decelDistance)/topSpeed;
 	clocksNeeded = (uint32_t)(totalTime * StepTimer::StepClockRate);
+	/*debugPrintf("[%f %f %f] td=%f ad=%f dd=%f ss=%f ts=%f es=%f\n",
+			(double)endCoordinates[0], (double)endCoordinates[1], (double)endCoordinates[2],
+			(double)totalDistance, (double)accelDistance, (double)decelDistance,
+			(double)startSpeed, (double)topSpeed, (double)endSpeed);*/
+	//CalcPressureAdvance();
 }
 
 // Decide what speed we would really like this move to end at.
@@ -1183,7 +1260,7 @@ inline void DDA::AdjustAcceleration()
 
 // Prepare this DDA for execution.
 // This must not be called with interrupts disabled, because it calls Platform::EnableDrive.
-void DDA::Prepare(uint8_t simMode, float extrusionPending[])
+void DDA::Prepare(uint8_t simMode)
 {
 	if (   xyMoving
 		&& reprap.GetMove().IsDRCenabled()
@@ -1289,7 +1366,7 @@ void DDA::Prepare(uint8_t simMode, float extrusionPending[])
 							{
 								speedChange = 0.0;
 							}
-							pdm->PrepareExtruder(*this, params, extrusionPending[drive - numTotalAxes], speedChange, usePressureAdvance);
+							pdm->PrepareExtruder(*this, params, speedChange, usePressureAdvance);
 
 							// Check for sensible values, print them if they look dubious
 							if (reprap.Debug(moduleDda)

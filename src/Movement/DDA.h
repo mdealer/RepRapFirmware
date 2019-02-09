@@ -49,7 +49,7 @@ public:
 	void SetPrevious(DDA *p) { prev = p; }
 	void Complete() { state = completed; }
 	bool Free();
-	void Prepare(uint8_t simMode, float extrusionPending[]) __attribute__ ((hot));	// Calculate all the values and freeze this DDA
+	void Prepare(uint8_t simMode) __attribute__ ((hot));	// Calculate all the values and freeze this DDA
 	bool HasStepError() const;
 	bool CanPauseAfter() const { return canPauseAfter; }
 	bool IsPrintingMove() const { return isPrintingMove; }			// Return true if this involves both XY movement and extrusion
@@ -62,6 +62,8 @@ public:
 	const int32_t *DriveCoordinates() const { return endPoint; }	// Get endpoints of a move in machine coordinates
 	void SetDriveCoordinate(int32_t a, size_t drive);				// Force an end point
 	void SetFeedRate(float rate) { requestedSpeed = rate; }
+	void SetExtrusionPending(size_t extruder, float value) { extrusionPending[extruder] = value; }
+	float GetExtrusionPending(size_t extruder) { return extrusionPending[extruder]; }
 	float GetEndCoordinate(size_t drive, bool disableMotorMapping);
 	bool FetchEndPosition(volatile int32_t ep[MaxTotalDrivers], volatile float endCoords[MaxTotalDrivers]);
     void SetPositions(const float move[], size_t numDrives);		// Force the endpoints to be these
@@ -82,6 +84,9 @@ public:
 	float GetProportionDone(bool moveWasAborted) const;						// Return the proportion of extrusion for the complete multi-segment move already done
 
 	void MoveAborted();
+
+	bool CalcPressureAdvance(float accelerations[], const float normalisedDirectionVector[]);
+	bool CalcPressureAdvance();
 
 	uint32_t GetClocksNeeded() const { return clocksNeeded; }
 	bool IsGoodToPrepare() const;
@@ -203,6 +208,7 @@ private:
 	float deceleration;						// The deceleration to use
     float requestedSpeed;					// The speed that the user asked for
     float virtualExtruderPosition;			// the virtual extruder position at the end of this move, used for pause/resume
+    float extrusionPending[MaxExtruders];
 
     // These vary depending on how we connect the move with its predecessor and successor, but remain constant while the move is being executed
 	float startSpeed;
