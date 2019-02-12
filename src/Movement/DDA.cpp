@@ -562,14 +562,16 @@ bool DDA::CalcPressureAdvance(float accelerations[], const float normalisedDirec
 			float compensationTime = reprap.GetPlatform().GetPressureAdvance(drive - numTotalAxes);
 			if (compensationTime > 0.0)
 			{
+				// E.B: Need to slow down during high compensation moves to avoid losing extruder steps
 				const float dv = directionVector[drive];
 				float extrusionCompensation = (endSpeed - startSpeed) * compensationTime * dv;
 				float extrusionRequired = dv * totalDistance + extrusionCompensation;
-				float prevExtrusionCompensation = (prev->endSpeed - prev->startSpeed) * compensationTime * prev->directionVector[drive];
-				float prevExtrusionRequired = prev->directionVector[drive] * prev->totalDistance + extrusionCompensation;
+				//float accelCompensationDistance = compensationTime * (topSpeed - startSpeed);
+				//float prevExtrusionCompensation = (prev->endSpeed - prev->startSpeed) * compensationTime * prev->directionVector[drive];
+				//float prevExtrusionRequired = prev->directionVector[drive] * prev->totalDistance + extrusionCompensation;
 				const float moveTime = GetClocksNeeded() / (float)StepTimer::StepClockRate;
 				float t, maxDv;
-				if ((isPrintingMove && !prev->isPrintingMove) || (!isPrintingMove && prev->isPrintingMove))
+				if (isPrintingMove != prev->isPrintingMove)
 				{
 					t = 1.0;
 					maxDv = reprap.GetPlatform().Acceleration(drive);
@@ -587,13 +589,6 @@ bool DDA::CalcPressureAdvance(float accelerations[], const float normalisedDirec
 		}
 	}
 	return adjusted;
-	/*
-	acceleration = maxAcceleration = VectorBoxIntersection(normalisedDirectionVector, accelerations, MaxTotalDrivers);
-	if (xyMoving)											// apply M204 acceleration limits to XY moves
-	{
-		acceleration = min<float>(acceleration, (isPrintingMove) ? reprap.GetMove().GetMaxPrintingAcceleration() : reprap.GetMove().GetMaxTravelAcceleration());
-	}
-	deceleration = acceleration;*/
 }
 
 // Set up a raw (unmapped) motor move returning true if the move does anything

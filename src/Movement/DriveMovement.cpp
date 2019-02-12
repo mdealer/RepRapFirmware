@@ -193,9 +193,13 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 	const float moveTime = dda.GetClocksNeeded() / (float)StepTimer::StepClockRate;
 	const float timeSinceMoveStarted = (dda.GetClocksNeeded() - dda.GetTimeLeft()) / (float)StepTimer::StepClockRate;
 	// Add on any fractional extrusion pending from the previous move
-	const float currentExtrusionPending = extrusionPending * max<float>(0.0, min<float>(0.25, fabsf(extrusionRequired / extrusionPending)));
-	extrusionPending -= currentExtrusionPending;
-	extrusionRequired += currentExtrusionPending;
+	if (dda.isPrintingMove)
+	{
+		// E.B.: Do not apply more than 25% of required extrusion to avoid impossible extruder moves on next segment after a tiny segment which was rounded down
+		const float currentExtrusionPending = max<float>(0.0, min<float>(extrusionRequired * 0.25, extrusionPending));
+		extrusionPending -= currentExtrusionPending;
+		extrusionRequired += currentExtrusionPending;
+	}
 	dv = extrusionRequired/dda.totalDistance;
 
 	direction = (dv >= 0.0);
@@ -209,7 +213,6 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 	float extrusionCompensation;
 	if (doCompensation && direction)
 	{
-		const float speedChange2 = dda.topSpeed - dda.startSpeed;
 #ifdef COMPENSATE_SPEED_CHANGES
 		// If there is a speed change at the start of the move, theoretically we should instantly advance or retard the filament by the associated compensation amount.
 		// We can't do that, so increase or decrease the extrusion factor instead, so that at least the extrusion will be correct by the end of the move.
@@ -218,7 +221,7 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 #endif
 		extrusionCompensation = (dda.endSpeed - dda.startSpeed) * compensationTime * dv;
 		extrusionRequired += extrusionCompensation;
-		accelCompensationDistance = compensationTime * speedChange2;
+		accelCompensationDistance = compensationTime * (dda.topSpeed - dda.startSpeed);
 		const float compensationClocks = compensationTime * (float)StepTimer::StepClockRate;
 		// Calculate the net total extrusion to allow for compensation. It may be negative.
 		mp.cart.compensationClocks = roundU32(compensationClocks);
@@ -234,7 +237,8 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 		// Calculate the acceleration phase parameters
 		mp.cart.accelStopStep = (uint32_t)(dda.accelDistance * effectiveStepsPerMm) + 1;
 	}
-	int32_t netSteps = (int32_t)(extrusionRequired * rawStepsPerMm);
+	// E.B. Rounding needed below for small perimeters, otherwise all extrusion goes into pending, causing blobbing (test using top 30% of https://www.thingiverse.com/thing:607968).
+	int32_t netSteps = (int32_t)roundf(extrusionRequired * rawStepsPerMm);
 	extrusionPending += extrusionRequired - (float)netSteps/rawStepsPerMm;
 	dda.SetExtrusionPending(extruder, extrusionPending);
 	if (!direction)
@@ -247,11 +251,12 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 	mp.cart.twoCsquaredTimesMmPerStepDivD = roundU64((double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.deceleration));
 
 	// Constant speed phase parameters
-	mp.cart.mmPerStepTimesCKdivtopSpeed = (uint32_t)((float)((uint64_t)StepTimer::StepClockRate * K1)/(effectiveStepsPerMm * dda.topSpeed));
+	mp.cart.mmPerStepTimesCKdivtopSpeed = (uint32_t)((double)((uint64_t)StepTimer::StepClockRate * K1)/(effectiveStepsPerMm * dda.topSpeed));
 
 	// Calculate the deceleration and reverse phase parameters and update totalSteps
 	// First check whether there is any deceleration at all, otherwise we may get strange results because of rounding errors
-	if (dda.decelDistance * effectiveStepsPerMm < 0.5)		// if less than 1 deceleration step
+	// E.B.: Commented out, as this appears to lose negative extrusion compensation, causing severe blobbing on small perimeters (test using top 30% of https://www.thingiverse.com/thing:607968).
+	/*if (dda.decelDistance * effectiveStepsPerMm < 0.5)		// if less than 1 deceleration step
 	{
 		//debugPrintf("tiny\n");
 		totalSteps = (uint32_t)max<int32_t>(netSteps, 0);
@@ -259,7 +264,7 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 		mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivD = 0;
 		twoDistanceToStopTimesCsquaredDivD = 0;
 	}
-	else
+	else*/
 	{
 		mp.cart.decelStartStep = (uint32_t)((params.decelStartDistance + accelCompensationDistance) * effectiveStepsPerMm) + 1;
 		const int32_t initialDecelSpeedTimesCdivD = (int32_t)params.topSpeedTimesCdivD - (int32_t)mp.cart.compensationClocks;	// signed because it may be negative and we square it
@@ -291,14 +296,18 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 			mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivD = 0;
 		}
 	}
+	// E.B.: Cheapskate debugging below
 	/*if (extruder == 0)
 	{
-		debugPrintf("mt=%05f ts=%05" PRIu32 " revss=%05" PRIu32 " ns=%05i dir=%05i effects=%05f tns=%05f ec=%05f ", (double)moveTime, totalSteps, reverseStartStep, (int)netSteps, (int)direction, (double)effectiveStepsPerMm, (double)dda.targetNextSpeed, (double)extrusionCompensation);
-		debugPrintf("[%03f %03f %03f] td=%05f ass=%05f ad=%05f dss=%05f dd=%05f acd=%05f er=%f ep=%f epend=%f ss=%f ts=%f es=%f acf=%f\n",
-						(double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2],
-						(double)dda.totalDistance, (double)mp.cart.accelStopStep, (double)dda.accelDistance, (double)mp.cart.decelStartStep, (double)dda.decelDistance,
-						(double)accelCompensationDistance, (double)extrusionRequired, (double)extruderPressure, (double)extrusionPending,
-						(double)dda.startSpeed, (double)dda.topSpeed, (double)dda.endSpeed, (double)accelCompFactor);
+		debugPrintf("mt=%05f ts=%05" PRIu32 " revss=%05" PRIu32 " ns=%05i dir=%05i effects=%05f tns=%05f ec=%05f dsd=%05f twoCTMPSA=%05f twoCTMPSD=%05f mmPSTCKS=%05f",
+			(double)moveTime, totalSteps, reverseStartStep, (int)netSteps, (int)direction, (double)effectiveStepsPerMm,
+			(double)dda.targetNextSpeed, (double)extrusionCompensation, (double)params.decelStartDistance, (double)mp.cart.twoCsquaredTimesMmPerStepDivA,
+			(double)mp.cart.twoCsquaredTimesMmPerStepDivD, (double)mp.cart.mmPerStepTimesCKdivtopSpeed);
+		debugPrintf("[%03f %03f %03f] td=%05f ass=%05f ad=%05f dss=%05f dd=%05f acd=%05f er=%f epend=%f ss=%f ts=%f es=%f acf=%f\n",
+			(double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2],
+			(double)dda.totalDistance, (double)mp.cart.accelStopStep, (double)dda.accelDistance, (double)mp.cart.decelStartStep, (double)dda.decelDistance,
+			(double)accelCompensationDistance, (double)extrusionRequired, (double)extrusionPending,
+			(double)dda.startSpeed, (double)dda.topSpeed, (double)dda.endSpeed, (double)accelCompFactor);
 	}*/
 }
 
