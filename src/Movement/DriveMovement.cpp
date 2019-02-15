@@ -189,14 +189,14 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 		}
 	}
 #endif
-	float extrusionPending = dda.prev->GetExtrusionPending(extruder);
+	float& extrusionPending = reprap.GetMove().GetExtrusionPending(extruder);
 	const float moveTime = dda.GetClocksNeeded() / (float)StepTimer::StepClockRate;
 	const float timeSinceMoveStarted = (dda.GetClocksNeeded() - dda.GetTimeLeft()) / (float)StepTimer::StepClockRate;
 	// Add on any fractional extrusion pending from the previous move
 	if (dda.isPrintingMove)
 	{
-		// E.B.: Do not apply more than 25% of required extrusion to avoid impossible extruder moves on next segment after a tiny segment which was rounded down
-		const float currentExtrusionPending = max<float>(0.0, min<float>(extrusionRequired * 0.25, extrusionPending));
+		// E.B.: Do not apply more than required extrusion to avoid impossible extruder moves
+		const float currentExtrusionPending = max<float>(0.0, min<float>(extrusionRequired, extrusionPending));
 		extrusionPending -= currentExtrusionPending;
 		extrusionRequired += currentExtrusionPending;
 	}
@@ -238,17 +238,17 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 		mp.cart.accelStopStep = (uint32_t)(dda.accelDistance * effectiveStepsPerMm) + 1;
 	}
 	// E.B. Rounding needed below for small perimeters, otherwise all extrusion goes into pending, causing blobbing (test using top 30% of https://www.thingiverse.com/thing:607968).
-	int32_t netSteps = (int32_t)roundf(extrusionRequired * rawStepsPerMm);
+	int32_t netSteps = (int32_t)(extrusionRequired * rawStepsPerMm);
 	extrusionPending += extrusionRequired - (float)netSteps/rawStepsPerMm;
-	dda.SetExtrusionPending(extruder, extrusionPending);
+	//dda.SetExtrusionPending(extruder, extrusionPending);
 	if (!direction)
 	{
 		netSteps = -netSteps;
 	}
 
 	// Note, netSteps may be negative at this point if we are applying pressure advance
-	mp.cart.twoCsquaredTimesMmPerStepDivA = roundU64((double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.acceleration));
-	mp.cart.twoCsquaredTimesMmPerStepDivD = roundU64((double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.deceleration));
+	mp.cart.twoCsquaredTimesMmPerStepDivA = round((double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.acceleration));
+	mp.cart.twoCsquaredTimesMmPerStepDivD = round((double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.deceleration));
 
 	// Constant speed phase parameters
 	mp.cart.mmPerStepTimesCKdivtopSpeed = (uint32_t)((double)((uint64_t)StepTimer::StepClockRate * K1)/(effectiveStepsPerMm * dda.topSpeed));
