@@ -174,7 +174,8 @@ private:
 	uint8_t drive;										// the drive that this DM controls
 	uint8_t microstepShift : 4,							// log2 of the microstepping factor (for when we use dynamic microstepping adjustment)
 			direction : 1,								// true=forwards, false=backwards
-			fullCurrent : 1;							// true if the drivers are set to the full current, false if they are set to the standstill current
+			fullCurrent : 1,							// true if the drivers are set to the full current, false if they are set to the standstill current
+			originalDirection : 1;
 	uint8_t stepsTillRecalc;							// how soon we need to recalculate
 
 	uint32_t totalSteps;								// total number of steps for this move

@@ -354,7 +354,7 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 			DriveMovement*& pdm = pddm[drive];
 			pdm = DriveMovement::Allocate(drive, DMState::moving);
 			pdm->totalSteps = labs(delta);				// for now this is the number of net steps, but gets adjusted later if there is a reverse in direction
-			pdm->direction = (delta >= 0);				// for now this is the direction of net movement, but gets adjusted later if it is a delta movement
+			pdm->originalDirection = pdm->direction = (delta >= 0);				// for now this is the direction of net movement, but gets adjusted later if it is a delta movement
 
 			if (drive < numTotalAxes)
 			{
@@ -388,7 +388,7 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 			{
 				pdm = DriveMovement::Allocate(drive, DMState::moving);
 				pdm->totalSteps = 0;
-				pdm->direction = true;
+				pdm->originalDirection = pdm->direction = true;
 			}
 		}
 	}
@@ -617,7 +617,7 @@ bool DDA::Init(const float_t adjustments[MaxTotalDrivers])
 			DriveMovement*& pdm = pddm[drive];
 			pdm = DriveMovement::Allocate(drive + MaxTotalDrivers, DMState::moving);
 			pdm->totalSteps = labs(delta);
-			pdm->direction = (delta >= 0);
+			pdm->originalDirection = pdm->direction = (delta >= 0);
 			realMove = true;
 		}
 	}
@@ -909,12 +909,12 @@ float DDA::AdvanceBabyStepping(float amount)
 						}
 						if (steps >= 0)
 						{
-							pdm->direction = true;
+							pdm->originalDirection = pdm->direction = true;
 							pdm->totalSteps = (uint32_t)steps;
 						}
 						else
 						{
-							pdm->direction = false;
+							pdm->originalDirection = pdm->direction = false;
 							pdm->totalSteps = (uint32_t)(-steps);
 						}
 					}
@@ -946,12 +946,12 @@ float DDA::AdvanceBabyStepping(float amount)
 
 				if (steps >= 0)
 				{
-					pdm->direction = true;
+					pdm->originalDirection = pdm->direction = true;
 					pdm->totalSteps = (uint32_t)steps;
 				}
 				else
 				{
-					pdm->direction = false;
+					pdm->originalDirection = pdm->direction = false;
 					pdm->totalSteps = (uint32_t)(-steps);
 				}
 			}
