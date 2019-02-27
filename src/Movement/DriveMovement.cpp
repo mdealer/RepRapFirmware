@@ -192,21 +192,19 @@ void DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float sp
 #endif
 	//volatile float& extrusionPendingVolatile = reprap.GetMove().GetExtrusionPending(extruder);
 	float extrusionPending = 0.0;//extrusionPendingVolatile;
-	const float moveTime = dda.GetClocksNeeded() / (float)StepTimer::StepClockRate;
-	const float timeSinceMoveStarted = (dda.GetClocksNeeded() - dda.GetTimeLeft()) / (float)StepTimer::StepClockRate;
 	float currentExtrusionPending;
 	if (extrusionRequired != 0.0)
 		reprap.GetMove().GetExtrusionRequired(extruder) += extrusionRequired;
 	// Do not apply more than required extrusion to avoid impossible extruder moves
-	if (dda.isPrintingMove || (!dda.isRetracted && dda.prev->isRetracted) && extrusionPending > 0.0)
+	/*if (dda.isPrintingMove || (!dda.isRetracted && dda.prev->isRetracted) && extrusionPending > 0.0)
 		currentExtrusionPending = max<float>(0.0, min<float>(fabs(extrusionRequired * 0.25 / extrusionPending), 1.0)) * extrusionPending;
 	else
 		currentExtrusionPending = 0.0;
 	if (currentExtrusionPending != 0.0)
 	{
-		//extrusionPendingVolatile -= currentExtrusionPending;
-		//extrusionRequired += currentExtrusionPending;
-	}
+		extrusionPendingVolatile -= currentExtrusionPending;
+		extrusionRequired += currentExtrusionPending;
+	}*/
 	//dda.SetExtrusionPending(extruder, dda.GetExtrusionPending(extruder) + extrusionRequired);
 	dv = extrusionRequired/dda.totalDistance;
 	originalDirection = direction = (dv >= 0.0);

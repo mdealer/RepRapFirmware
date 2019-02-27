@@ -282,7 +282,6 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 	{
 		isDeltaMovement = false;
 	}
-
 	xyMoving = false;
 	bool axesMoving = false;
 	bool extruding = false;												// we set this true if extrusion was commanded, even if it is too small to do
@@ -332,7 +331,7 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 		}
 		else
 		{
-			extrusionPending[drive - numTotalAxes] = 0.0;
+			//extrusionPending[drive - numTotalAxes] = 0.0;
 			// It's an extruder drive. We defer calculating the steps because they may be affected by nonlinear extrusion, which we can't calculate until we
 			// know the speed of the move, and because extruder movement is relative so we need to accumulate fractions of a whole step between moves.
 			const float movement = nextMove.coords[drive];
@@ -394,6 +393,7 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 	}
 
 	// 3. Store some values
+	//isRetracted = nextMove.isRetracted;
 	xAxes = nextMove.xAxes;
 	yAxes = nextMove.yAxes;
 	endStopsToCheck = nextMove.endStopsToCheck;
@@ -455,6 +455,12 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 	float normalisedDirectionVector[MaxTotalDrivers];		// used to hold a unit-length vector in the direction of motion
 	memcpy(normalisedDirectionVector, directionVector, sizeof(normalisedDirectionVector));
 	Absolute(normalisedDirectionVector, MaxTotalDrivers);
+	acceleration = maxAcceleration = VectorBoxIntersection(normalisedDirectionVector, accelerations, MaxTotalDrivers);
+	if (xyMoving)											// apply M204 acceleration limits to XY moves
+	{
+		acceleration = min<float>(acceleration, (isPrintingMove) ? move.GetMaxPrintingAcceleration() : move.GetMaxTravelAcceleration());
+	}
+	deceleration = acceleration;
 	if (usePressureAdvance)
 		CalcPressureAdvance(accelerations, normalisedDirectionVector);
 	acceleration = maxAcceleration = VectorBoxIntersection(normalisedDirectionVector, accelerations, MaxTotalDrivers);
@@ -512,17 +518,17 @@ bool DDA::Init(GCodes::RawMove &nextMove, bool doMotorMapping)
 		prev->targetNextSpeed = min<float>(sqrtf(deceleration * totalDistance * 2.0), requestedSpeed);
 		DoLookahead(prev);
 		startSpeed = prev->endSpeed;
-		if (usePressureAdvance)
+		/*if (usePressureAdvance)
 		{
 			CalcPressureAdvance();
 			RecalculateMove();
 			prev->targetNextSpeed = min<float>(sqrtf(deceleration * totalDistance * 2.0), startSpeed);
 			DoLookahead(prev);
 			startSpeed = prev->endSpeed;
-		}
+		}*/
 	}
-	if (usePressureAdvance)
-		CalcPressureAdvance();
+	//if (usePressureAdvance)
+	//	CalcPressureAdvance();
 	RecalculateMove();
 	state = provisional;
 	return true;
@@ -569,7 +575,7 @@ bool DDA::CalcPressureAdvance(float accelerations[], const float normalisedDirec
 				//float accelCompensationDistance = compensationTime * (topSpeed - startSpeed);
 				//float prevExtrusionCompensation = (prev->endSpeed - prev->startSpeed) * compensationTime * prev->directionVector[drive];
 				//float prevExtrusionRequired = prev->directionVector[drive] * prev->totalDistance + extrusionCompensation;
-				const float moveTime = GetClocksNeeded() / (float)StepTimer::StepClockRate;
+				const float moveTime = (topSpeed - startSpeed)/acceleration + (topSpeed - endSpeed)/deceleration + (totalDistance - accelDistance - decelDistance)/topSpeed;
 				float t, maxDv;
 				if (isPrintingMove != prev->isPrintingMove)
 				{
@@ -583,8 +589,10 @@ bool DDA::CalcPressureAdvance(float accelerations[], const float normalisedDirec
 				}
 				accelerations[drive] = min<float>(accelerations[drive], min<float>(maxDv, reprap.GetPlatform().GetInstantDv(drive) / t));
 				adjusted = true;
-				//debugPrintf("mt=%f t=%f ec=%f er=%f \n", (double)moveTime, (double)t, (double)extrusionCompensation, (double)extrusionRequired);
-
+#ifdef PA_DEBUG
+				if (drive == numTotalAxes)
+					debugPrintf("mt=%f t=%f ec=%f er=%f \n", (double)moveTime, (double)t, (double)extrusionCompensation, (double)extrusionRequired);
+#endif
 			}
 		}
 	}
@@ -1276,7 +1284,6 @@ void DDA::Prepare(uint8_t simMode)
 
 	PrepParams params;
 	params.decelStartDistance = totalDistance - decelDistance;
-
 	if (simMode == 0)
 	{
 		if (isDeltaMovement)
