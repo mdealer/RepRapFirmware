@@ -440,12 +440,11 @@ void Platform::Init()
 		entry = 0;												// reset all to zero as we have no known slow drivers yet
 	}
 	slowDriversBitmap = 0;										// assume no drivers need extended step pulse timing
-
+	SetRetractionCompensation(0.0);
 	for (size_t extr = 0; extr < MaxExtruders; ++extr)
 	{
 		extruderDrivers[extr] = (uint8_t)(extr + MinAxes);		// set up default extruder drive mapping
 		SetPressureAdvance(extr, 0.0);							// no pressure advance
-		SetRetractionCompensation(extr, 0.0);
 #if SUPPORT_NONLINEAR_EXTRUSION
 		nonlinearExtrusionA[extr] = nonlinearExtrusionB[extr] = 0.0;
 		nonlinearExtrusionLimit[extr] = DefaultNonlinearExtrusionLimit;
@@ -3972,12 +3971,9 @@ void Platform::SetPressureAdvance(size_t extruder, float factor)
 	}
 }
 
-void Platform::SetRetractionCompensation(size_t extruder, float factor)
+void Platform::SetRetractionCompensation(float factor)
 {
-	if (extruder < MaxExtruders)
-	{
-		retractionCompensation[extruder] = factor;
-	}
+	retractionCompensation = factor;
 }
 
 #if SUPPORT_NONLINEAR_EXTRUSION

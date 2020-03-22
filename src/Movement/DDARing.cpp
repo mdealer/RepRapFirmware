@@ -331,13 +331,13 @@ void DDARing::CurrentMoveCompleted()
 		extrusionAccumulators[drive - numAxes] += currentDda->GetStepsTaken(drive);
 		if (currentDda->IsPrintingMove())
 		{
-			float accumulatorDuration = 5.0;
+			constexpr float accumulatorDuration = 5.0;
 			float mt = currentDda->GetClocksNeeded() / (double)StepTimer::StepClockRate;
-			float extrusionRequired = (currentDda->totalDistance * currentDda->directionVector[drive]) / mt;
+			float extrusionRate = (currentDda->totalDistance * currentDda->directionVector[drive]) / mt;
 			if (accumulatorDuration > mt)
-				lastPrintingMoveExtrusionRequired[drive - numAxes] = lastPrintingMoveExtrusionRequired[drive - numAxes] * (1.0 - mt / accumulatorDuration) + mt / accumulatorDuration * extrusionRequired;
+				lastPrintingMoveExtrusionRequired[drive - numAxes] = lastPrintingMoveExtrusionRequired[drive - numAxes] * (1.0 - mt / accumulatorDuration) + mt / accumulatorDuration * extrusionRate;
 			else
-				lastPrintingMoveExtrusionRequired[drive - numAxes] = extrusionRequired;
+				lastPrintingMoveExtrusionRequired[drive - numAxes] = extrusionRate;
 		}
 	}
 	currentDda = nullptr;

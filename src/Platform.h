@@ -447,8 +447,8 @@ public:
 	float AxisTotalLength(size_t axis) const;
 	float GetPressureAdvance(size_t extruder) const;
 	void SetPressureAdvance(size_t extruder, float factor);
-	float GetRetractionCompensation(size_t extruder) const;
-	void SetRetractionCompensation(size_t extruder, float factor);
+	float GetRetractionCompensation() const;
+	void SetRetractionCompensation(float factor);
 
 	void SetEndStopConfiguration(size_t axis, EndStopPosition endstopPos, EndStopInputType inputType)
 		pre(axis < MaxAxes);
@@ -745,7 +745,7 @@ private:
 	float driveStepsPerUnit[MaxTotalDrivers];
 	float instantDvs[MaxTotalDrivers];
 	float pressureAdvance[MaxExtruders];
-	float retractionCompensation[MaxExtruders];
+	float retractionCompensation;
 #if SUPPORT_NONLINEAR_EXTRUSION
 	float nonlinearExtrusionA[MaxExtruders], nonlinearExtrusionB[MaxExtruders], nonlinearExtrusionLimit[MaxExtruders];
 #endif
@@ -1117,9 +1117,9 @@ inline float Platform::GetPressureAdvance(size_t extruder) const
 	return (extruder < MaxExtruders) ? pressureAdvance[extruder] : 0.0;
 }
 
-inline float Platform::GetRetractionCompensation(size_t extruder) const
+inline float Platform::GetRetractionCompensation() const
 {
-	return (extruder < MaxExtruders) ? retractionCompensation[extruder] : 0.0;
+	return retractionCompensation;
 }
 
 // This is called by the tick ISR to get the raw Z probe reading to feed to the filter

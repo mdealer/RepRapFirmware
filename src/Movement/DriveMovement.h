@@ -138,7 +138,7 @@ public:
 	bool CalcNextStepTimeDelta(const DDA &dda, bool live) __attribute__ ((hot));
 	bool PrepareCartesianAxis(const DDA& dda, const PrepParams& params) __attribute__ ((hot));
 	bool PrepareDeltaAxis(const DDA& dda, const PrepParams& params) __attribute__ ((hot));
-	bool PrepareExtruder(const DDA& dda, const PrepParams& params, float& extrusionPending, float speedChange, bool doCompensation) __attribute__ ((hot));
+	bool PrepareExtruder(DDA& dda, const PrepParams& params, float& extrusionPending, float speedChange, bool doCompensation) __attribute__ ((hot));
 	void ReduceSpeed(uint32_t inverseSpeedFactor);
 	void DebugPrint() const;
 	int32_t GetNetStepsLeft() const;

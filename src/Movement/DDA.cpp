@@ -594,9 +594,22 @@ inline bool DDA::IsAccelerationMove() const
 // Return true if there is no reason to delay preparing this move
 bool DDA::IsGoodToPrepare() const
 {
-	return
-			endSpeed >= topSpeed										// if it never decelerates, we can't improve it
-			&& (!flags.isFirmwareUnretractMove || next->state == provisional); 	// Need to know the speed of next move for dynamic unretraction
+	if (!flags.isFirmwareUnretractMove)
+		return endSpeed >= topSpeed;										// if it never decelerates, we can't improve it
+	auto dda = next;
+	float totalTime = 0.0; // Need to know the speed of next N moves for dynamic unretraction
+	size_t ringCount = 0;
+	while (dda->state == provisional)
+	{
+		++ringCount;
+		if (!dda->IsPrintingMove())
+			return true;
+		totalTime += dda->clocksNeeded / StepTimer::StepClockRate;
+		if (totalTime >= 5.0 || ringCount >= 10)
+			return true;
+		dda = dda->next;
+	}
+	return false;
 }
 
 #if 0

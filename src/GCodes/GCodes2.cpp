@@ -2019,23 +2019,15 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply)
 			}
 			if (gb.Seen('C'))
 			{
-				float rc[MaxExtruders];
-				size_t eCount = MaxExtruders;
-				gb.GetFloatArray(rc, eCount, false);
-				for (size_t i = 0; i < numExtruders; i++)
-				{
-					platform.SetRetractionCompensation(i, rc[i]);
-				}
+				platform.SetRetractionCompensation(gb.GetFValue());
 				seen = true;
 			}
 			if (!seen)
 			{
-				reply.printf("Retraction/un-retraction settings: length %.2f/%.2fmm, speed %d/%dmm/min, Z hop %.2fmm, compensation: %.2f, %.2f, %.2f, %.2f, %.2f, %.2f",
+				reply.printf("Retraction/un-retraction settings: length %.2f/%.2fmm, speed %d/%dmm/min, Z hop %.2fmm, compensation: %.2f",
 					(double)retractLength, (double)(retractLength + retractExtra), (int)(retractSpeed * MinutesToSeconds),
 					(int)(unRetractSpeed * MinutesToSeconds), (double)retractHop,
-					(double)platform.GetRetractionCompensation(0), (double)platform.GetRetractionCompensation(1),
-					(double)platform.GetRetractionCompensation(2), (double)platform.GetRetractionCompensation(3),
-					(double)platform.GetRetractionCompensation(4), (double)platform.GetRetractionCompensation(5));
+					(double)platform.GetRetractionCompensation());
 			}
 		}
 		break;
