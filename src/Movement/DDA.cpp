@@ -274,7 +274,7 @@ bool DDA::InitStandardMove(DDARing& ring, GCodes::RawMove &nextMove, bool doMoto
 	{
 		flags.isDeltaMovement = false;
 	}
-
+	flags.isFirmwareUnretractMove = nextMove.isFirmwareRetraction && nextMove.feedRate > 0.0;
 	flags.xyMoving = false;
 	bool axesMoving = false;
 	bool extruding = false;												// we set this true if extrusion was commanded, even if it is too small to do
@@ -594,7 +594,9 @@ inline bool DDA::IsAccelerationMove() const
 // Return true if there is no reason to delay preparing this move
 bool DDA::IsGoodToPrepare() const
 {
-	return endSpeed >= topSpeed;							// if it never decelerates, we can't improve it
+	return
+			endSpeed >= topSpeed										// if it never decelerates, we can't improve it
+			&& (!flags.isFirmwareUnretractMove || next->state == provisional); 	// Need to know the speed of next move for dynamic unretraction
 }
 
 #if 0

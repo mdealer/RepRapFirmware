@@ -42,6 +42,7 @@ public:
 	uint32_t GetScheduledMoves() const { return scheduledMoves; }				// How many moves have been scheduled?
 	uint32_t GetCompletedMoves() const { return completedMoves; }				// How many moves have been completed?
 	void ResetMoveCounters() { scheduledMoves = completedMoves = 0; }
+	float GetLastPrintingMoveExtrusionRequired(size_t extruder) const { return extruder < MaxExtruders ? lastPrintingMoveExtrusionRequired[extruder] : 0.0; };
 
 	float GetSimulationTime() const { return simulationTime; }
 	void ResetSimulationTime() { simulationTime = 0.0; }
@@ -100,6 +101,7 @@ private:
 	volatile int32_t extrusionAccumulators[MaxExtruders]; 						// Accumulated extruder motor steps
 	volatile uint32_t extrudersPrintingSince;									// The milliseconds clock time when extrudersPrinting was set to true
 	volatile bool extrudersPrinting;											// Set whenever an extruder starts a printing move, cleared by a non-printing extruder move
+	volatile float lastPrintingMoveExtrusionRequired[MaxExtruders];
 };
 
 // Start the next move. Return true if the

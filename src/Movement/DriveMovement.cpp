@@ -207,9 +207,29 @@ bool DriveMovement::PrepareExtruder(const DDA& dda, const PrepParams& params, fl
 		}
 	}
 #endif
-
+	const float moveTime = dda.clocksNeeded / (float)StepTimer::StepClockRate;
 	// Add on any fractional extrusion pending from the previous move
-	extrusionRequired += extrusionPending;
+	const float pendingExtrusionSmoothTime = 5.0;
+	const float currentExtrusionPending = min<float>(1.0, moveTime / pendingExtrusionSmoothTime) * extrusionPending;
+	extrusionRequired += currentExtrusionPending;
+	float unretractPending = 0.0;
+	if (dda.flags.isFirmwareUnretractMove && dda.GetNext()->IsPrintingMove())
+	{
+		float dvNext = dda.next->directionVector[drive];
+		float nextExtrusionRate = dda.next->totalDistance * dvNext / (dda.next->clocksNeeded / (float)StepTimer::StepClockRate);
+		float lastExtrusionRate = reprap.GetMove().GetLastPrintingMoveExtrusionRequired(extruder);
+		unretractPending = lastExtrusionRate > 0.01 ? (nextExtrusionRate - lastExtrusionRate) * reprap.GetPlatform().GetRetractionCompensation(extruder) : 0.0;
+#if DEBUG_RETRACTION_COMPENSATION
+		debugPrintf("up=%03f, ler=%03f, ner=%03f, ep=%03f\n", (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
+#endif
+		extrusionRequired += unretractPending;
+	}
+	else
+	{
+#if DEBUG_RETRACTION_COMPENSATION
+		debugPrintf("cep=%03f, ep=%03f\n", (double)currentExtrusionPending, (double)extrusionPending);
+#endif
+	}
 	dv = extrusionRequired/dda.totalDistance;
 	direction = (dv >= 0.0);
 
@@ -250,7 +270,7 @@ bool DriveMovement::PrepareExtruder(const DDA& dda, const PrepParams& params, fl
 	}
 
 	int32_t netSteps = (int32_t)(extrusionRequired * rawStepsPerMm);
-	extrusionPending = extrusionRequired - (float)netSteps/rawStepsPerMm;
+	extrusionPending = (extrusionPending - currentExtrusionPending) + extrusionRequired - (float)netSteps/rawStepsPerMm - unretractPending;
 
 	if (!direction)
 	{

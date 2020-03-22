@@ -445,6 +445,7 @@ void Platform::Init()
 	{
 		extruderDrivers[extr] = (uint8_t)(extr + MinAxes);		// set up default extruder drive mapping
 		SetPressureAdvance(extr, 0.0);							// no pressure advance
+		SetRetractionCompensation(extr, 0.0);
 #if SUPPORT_NONLINEAR_EXTRUSION
 		nonlinearExtrusionA[extr] = nonlinearExtrusionB[extr] = 0.0;
 		nonlinearExtrusionLimit[extr] = DefaultNonlinearExtrusionLimit;
@@ -3968,6 +3969,14 @@ void Platform::SetPressureAdvance(size_t extruder, float factor)
 	if (extruder < MaxExtruders)
 	{
 		pressureAdvance[extruder] = factor;
+	}
+}
+
+void Platform::SetRetractionCompensation(size_t extruder, float factor)
+{
+	if (extruder < MaxExtruders)
+	{
+		retractionCompensation[extruder] = factor;
 	}
 }
 
