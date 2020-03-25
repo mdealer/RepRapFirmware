@@ -210,13 +210,24 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	const float moveTime = dda.clocksNeeded / (float)StepTimer::StepClockRate;
 	// Add on any fractional extrusion pending from the previous move
 	constexpr float pendingExtrusionSmoothTime = 5.0;
-	constexpr float maxAdjustmentRatio = 0.25;
-	float currentExtrusionPending = min<float>(1.0, moveTime / pendingExtrusionSmoothTime) * extrusionPending;
-	if (fabs(currentExtrusionPending) > fabs(extrusionRequired * maxAdjustmentRatio))
-		currentExtrusionPending = extrusionRequired * maxAdjustmentRatio * (fabs(currentExtrusionPending) / currentExtrusionPending);
-	extrusionRequired += currentExtrusionPending;
-	float unretractPending = 0.0;
+	constexpr float pendingExtrusionSmoothSpeedRatio = 0.001;
+	constexpr float maxAdjustmentRatio = 2.0;
 	float retractionComp = reprap.GetPlatform().GetRetractionCompensation();
+	float currentExtrusionPending;
+	if (retractionComp == 0.0 || !dda.GetNext()->IsPrintingMove())
+	{
+		currentExtrusionPending = 0.0;
+	}
+	else
+	{
+		//currentExtrusionPending = min<float>(1.0, moveTime / pendingExtrusionSmoothTime) * extrusionPending;
+		//currentExtrusionPending = extrusionPending;
+		currentExtrusionPending = min<float>(1.0, moveTime / pendingExtrusionSmoothTime + dda.topSpeed * pendingExtrusionSmoothSpeedRatio) * extrusionPending;
+		if (fabs(currentExtrusionPending) > fabs(extrusionRequired * maxAdjustmentRatio))
+			currentExtrusionPending = extrusionRequired * maxAdjustmentRatio * (fabs(currentExtrusionPending) / currentExtrusionPending);
+		extrusionRequired += currentExtrusionPending;
+	}
+	float unretractPending = 0.0;
 	if (dda.flags.isFirmwareUnretractMove && dda.GetNext()->IsPrintingMove())
 	{
 		auto *nextDda = dda.GetNext();

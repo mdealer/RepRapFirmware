@@ -6,6 +6,7 @@
 				<macros>
 					<stringMacro name="LinkFlags2" type="VALUE_TEXT" value="-Wl,--end-group -lm"/>
 					<stringMacro name="LinkFlags1" type="VALUE_TEXT" value="-mthumb -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-section-align -Wl,--warn-unresolved-symbols -Wl,--start-group"/>
+					<stringMacro name="ArmGccPath" type="VALUE_TEXT" value="C:\Program Files (x86)\GNU Tools ARM Embedded\8 2018-q4-major\bin"/>
 					<stringMacro name="CoreName" type="VALUE_TEXT" value="CoreNG"/>
 				</macros>
 				<externalSettings/>
@@ -151,6 +152,7 @@
 				<macros>
 					<stringMacro name="LinkFlags2" type="VALUE_TEXT" value="-Wl,--end-group -lm"/>
 					<stringMacro name="LinkFlags1" type="VALUE_TEXT" value="-mthumb -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-section-align -Wl,--warn-unresolved-symbols -Wl,--start-group"/>
+					<stringMacro name="ArmGccPath" type="VALUE_TEXT" value="C:\Program Files (x86)\GNU Tools ARM Embedded\8 2018-q4-major\bin"/>
 					<stringMacro name="CoreName" type="VALUE_TEXT" value="CoreNG"/>
 				</macros>
 				<externalSettings/>
@@ -307,6 +309,7 @@
 				<macros>
 					<stringMacro name="LinkFlags2" type="VALUE_TEXT" value="-Wl,--end-group -lm"/>
 					<stringMacro name="LinkFlags1" type="VALUE_TEXT" value="-mthumb -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-section-align -Wl,--warn-unresolved-symbols -Wl,--start-group"/>
+					<stringMacro name="ArmGccPath" type="VALUE_TEXT" value="C:\Program Files (x86)\GNU Tools ARM Embedded\8 2018-q4-major\bin"/>
 					<stringMacro name="CoreName" type="VALUE_TEXT" value="CoreNG"/>
 				</macros>
 				<externalSettings/>
@@ -432,6 +435,7 @@
 				<macros>
 					<stringMacro name="LinkFlags2" type="VALUE_TEXT" value="-Wl,--end-group -lm"/>
 					<stringMacro name="LinkFlags1" type="VALUE_TEXT" value="-mthumb -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-section-align -Wl,--warn-unresolved-symbols -Wl,--start-group"/>
+					<stringMacro name="ArmGccPath" type="VALUE_TEXT" value="C:\Program Files (x86)\GNU Tools ARM Embedded\8 2018-q4-major\bin"/>
 					<stringMacro name="CoreName" type="VALUE_TEXT" value="CoreNG"/>
 				</macros>
 				<externalSettings/>
@@ -594,6 +598,7 @@
 				<macros>
 					<stringMacro name="LinkFlags2" type="VALUE_TEXT" value="-Wl,--end-group -lm"/>
 					<stringMacro name="LinkFlags1" type="VALUE_TEXT" value="-mthumb -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--warn-section-align -Wl,--warn-unresolved-symbols -Wl,--start-group"/>
+					<stringMacro name="ArmGccPath" type="VALUE_TEXT" value="C:\Program Files (x86)\GNU Tools ARM Embedded\8 2018-q4-major\bin"/>
 					<stringMacro name="CoreName" type="VALUE_TEXT" value="CoreNG"/>
 				</macros>
 				<externalSettings/>
