@@ -605,7 +605,7 @@ bool DDA::IsGoodToPrepare() const
 		if (!dda->IsPrintingMove())
 			return true;
 		totalTime += dda->clocksNeeded / StepTimer::StepClockRate;
-		if (totalTime >= 5.0 || ringCount >= 10)
+		if (totalTime >= 1.0 || ringCount >= 5)
 			return true;
 		dda = dda->next;
 	}

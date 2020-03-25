@@ -208,38 +208,15 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	}
 #endif
 	const float moveTime = dda.clocksNeeded / (float)StepTimer::StepClockRate;
-	// Add on any fractional extrusion pending from the previous move
-	constexpr float pendingExtrusionSmoothTime = 5.0;
-	constexpr float pendingExtrusionSmoothSpeedRatio = 0.001;
-	constexpr float maxAdjustmentRatio = 2.0;
 	float retractionComp = reprap.GetPlatform().GetRetractionCompensation();
-	float currentExtrusionPending;
-	if (retractionComp == 0.0 || !dda.GetNext()->IsPrintingMove())
-	{
-		currentExtrusionPending = 0.0;
-	}
-	else
-	{
-		//currentExtrusionPending = min<float>(1.0, moveTime / pendingExtrusionSmoothTime) * extrusionPending;
-		//currentExtrusionPending = extrusionPending;
-		currentExtrusionPending = min<float>(1.0, moveTime / pendingExtrusionSmoothTime + dda.topSpeed * pendingExtrusionSmoothSpeedRatio) * extrusionPending;
-		if (fabs(currentExtrusionPending) > fabs(extrusionRequired * maxAdjustmentRatio))
-			currentExtrusionPending = extrusionRequired * maxAdjustmentRatio * (fabs(currentExtrusionPending) / currentExtrusionPending);
-		extrusionRequired += currentExtrusionPending;
-	}
+	// Add on any fractional extrusion pending from the previous move
+	extrusionRequired += extrusionPending;
 	float unretractPending = 0.0;
 	if (dda.flags.isFirmwareUnretractMove && dda.GetNext()->IsPrintingMove())
 	{
-		auto *nextDda = dda.GetNext();
 		float nextExtrusionRate = 0.0;
-		size_t n = 0;
-		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional)
-		{
-			++n;
-			nextExtrusionRate = nextExtrusionRate + nextDda->totalDistance * nextDda->directionVector[drive] / (nextDda->clocksNeeded / (float)StepTimer::StepClockRate);
-			nextDda = nextDda->next;
-		}
-		nextExtrusionRate /= n;
+		if (dda.next->IsPrintingMove() && dda.next->state == DDA::provisional)
+			nextExtrusionRate = nextExtrusionRate + dda.next->totalDistance * dda.next->directionVector[drive] / (dda.next->clocksNeeded / (float)StepTimer::StepClockRate);
 		float lastExtrusionRate = reprap.GetMove().GetLastPrintingMoveExtrusionRequired(extruder);
 		unretractPending = lastExtrusionRate > 0.01 ? (nextExtrusionRate - lastExtrusionRate) * retractionComp : 0.0;
 		if (extrusionRequired > 0.0)
@@ -247,14 +224,16 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		else
 			unretractPending = max<float>(extrusionRequired * 0.95, unretractPending);
 #if DEBUG_RETRACTION_COMPENSATION
-		debugPrintf("mt=%03f, er=%03f, up=%03f, ler=%03f, ner=%03f, ep=%03f\n", (double)moveTime, (double)extrusionRequired, (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
+		if (extruder == 0)
+			debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, up=%03f, ler=%03f, ner=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
 #endif
 		extrusionRequired += unretractPending;
 	}
 	else
 	{
 #if DEBUG_RETRACTION_COMPENSATION
-		debugPrintf("mt=%03f, er=%03f, cep=%03f, ep=%03f\n", (double)moveTime, (double)extrusionRequired, (double)currentExtrusionPending, (double)extrusionPending);
+		if (extruder == 0)
+			debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)extrusionPending);
 #endif
 	}
 	dv = extrusionRequired/dda.totalDistance;
@@ -297,10 +276,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	}
 
 	int32_t netSteps = (int32_t)(extrusionRequired * rawStepsPerMm);
-	if (retractionComp != 0.0)
-		extrusionPending = (extrusionPending - currentExtrusionPending) + extrusionRequired - (float)netSteps/rawStepsPerMm - unretractPending;
-	else
-		extrusionPending = extrusionRequired - (float)netSteps/rawStepsPerMm;
+	extrusionPending = extrusionRequired - (float)netSteps/rawStepsPerMm;
 
 	if (!direction)
 	{
