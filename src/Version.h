@@ -11,7 +11,7 @@
 
 #ifndef VERSION
 #ifdef RTOS
-# define MAIN_VERSION	"2.05.1.1"
+# define MAIN_VERSION	"2.05.1.1-simple_dynamic_unretraction"
 #else
 # define MAIN_VERSION	"1.26.1"
 #endif
@@ -20,9 +20,9 @@
 #endif
 
 #ifndef DATE
-# define DATE "2020-03-22b1"
+# define DATE "2020-03-26b1"
 #endif
 
-#define AUTHORS "reprappro, dc42, chrishamm, t3p3, dnewman, printm3d"
+#define AUTHORS "reprappro, dc42, chrishamm, t3p3, dnewman, printm3d, mdealer"
 
 #endif /* SRC_VERSION_H_ */

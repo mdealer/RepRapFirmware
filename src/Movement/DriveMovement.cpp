@@ -223,7 +223,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 			unretractPending = min<float>(extrusionRequired * 0.95, unretractPending);
 		else
 			unretractPending = max<float>(extrusionRequired * 0.95, unretractPending);
-#if DEBUG_RETRACTION_COMPENSATION
+#if DEBUG_RETRACTION_COMPENSATION > 1
 		if (extruder == 0)
 			debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, up=%03f, ler=%03f, ner=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
 #endif
@@ -231,7 +231,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	}
 	else
 	{
-#if DEBUG_RETRACTION_COMPENSATION
+#if DEBUG_RETRACTION_COMPENSATION > 0
 		if (extruder == 0)
 			debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)extrusionPending);
 #endif
