@@ -214,16 +214,24 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	float unretractPending = 0.0;
 	if (dda.flags.isFirmwareUnretractMove && dda.GetNext()->IsPrintingMove())
 	{
+		auto *nextDda = dda.GetNext();
 		float nextExtrusionRate = 0.0;
-		if (dda.next->IsPrintingMove() && dda.next->state == DDA::provisional)
-			nextExtrusionRate = nextExtrusionRate + dda.next->totalDistance * dda.next->directionVector[drive] / (dda.next->clocksNeeded / (float)StepTimer::StepClockRate);
+		size_t n = 0;
+		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional)
+		{
+			++n;
+			nextExtrusionRate = nextExtrusionRate + nextDda->totalDistance * nextDda->directionVector[drive] / (nextDda->clocksNeeded / (double)StepTimer::StepClockRate);
+			nextDda = nextDda->next;
+		}
+		if (n)
+			nextExtrusionRate /= n;
 		float lastExtrusionRate = reprap.GetMove().GetLastPrintingMoveExtrusionRequired(extruder);
 		unretractPending = lastExtrusionRate > 0.01 ? (nextExtrusionRate - lastExtrusionRate) * retractionComp : 0.0;
 		if (extrusionRequired > 0.0)
 			unretractPending = min<float>(extrusionRequired * 0.95, unretractPending);
 		else
 			unretractPending = max<float>(extrusionRequired * 0.95, unretractPending);
-#if DEBUG_RETRACTION_COMPENSATION > 1
+#if DEBUG_RETRACTION_COMPENSATION > 0
 		if (extruder == 0)
 			debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, up=%03f, ler=%03f, ner=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
 #endif
@@ -231,7 +239,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	}
 	else
 	{
-#if DEBUG_RETRACTION_COMPENSATION > 0
+#if DEBUG_RETRACTION_COMPENSATION > 1
 		if (extruder == 0)
 			debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)extrusionPending);
 #endif
