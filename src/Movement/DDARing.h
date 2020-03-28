@@ -43,6 +43,7 @@ public:
 	uint32_t GetCompletedMoves() const { return completedMoves; }				// How many moves have been completed?
 	void ResetMoveCounters() { scheduledMoves = completedMoves = 0; }
 	float GetLastPrintingMoveExtrusionRequired(size_t extruder) const { return extruder < MaxExtruders ? lastPrintingMoveExtrusionRequired[extruder] : 0.0; };
+	void SetLastPrintingMoveExtrusionRequired(size_t extruder, float v) { if (extruder < MaxExtruders) lastPrintingMoveExtrusionRequired[extruder] = v; };
 
 	float GetSimulationTime() const { return simulationTime; }
 	void ResetSimulationTime() { simulationTime = 0.0; }

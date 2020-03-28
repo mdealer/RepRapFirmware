@@ -211,31 +211,33 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	float retractionComp = reprap.GetPlatform().GetRetractionCompensation();
 	// Add on any fractional extrusion pending from the previous move
 	extrusionRequired += extrusionPending;
-	float unretractPending = 0.0;
 	if (dda.flags.isFirmwareUnretractMove && dda.GetNext()->IsPrintingMove())
 	{
 		auto *nextDda = dda.GetNext();
 		float nextExtrusionRate = 0.0;
 		size_t n = 0;
-		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional)
+		uint32_t totalTime = 0;
+		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional && totalTime < StepTimer::StepClockRate / 100)
 		{
 			++n;
+			totalTime += nextDda->clocksNeeded;
 			nextExtrusionRate = nextExtrusionRate + nextDda->totalDistance * nextDda->directionVector[drive] / (nextDda->clocksNeeded / (double)StepTimer::StepClockRate);
 			nextDda = nextDda->next;
 		}
 		if (n)
 			nextExtrusionRate /= n;
 		float lastExtrusionRate = reprap.GetMove().GetLastPrintingMoveExtrusionRequired(extruder);
-		unretractPending = lastExtrusionRate > 0.01 ? (nextExtrusionRate - lastExtrusionRate) * retractionComp : 0.0;
-		if (extrusionRequired > 0.0)
-			unretractPending = min<float>(extrusionRequired * 0.95, unretractPending);
-		else
-			unretractPending = max<float>(extrusionRequired * 0.95, unretractPending);
-#if DEBUG_RETRACTION_COMPENSATION > 0
-		if (extruder == 0)
-			debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, up=%03f, ler=%03f, ner=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
-#endif
-		extrusionRequired += unretractPending;
+		if (abs(nextExtrusionRate) > 0.00001 && abs(lastExtrusionRate) > 0.00001)
+		{
+			constexpr float maxRatio = 2.0;
+			float unretractPending = lastExtrusionRate > 0.01 ? (nextExtrusionRate - lastExtrusionRate) * retractionComp : 0.0;
+			unretractPending = min<float>(abs(extrusionRequired) * maxRatio, max<float>(-abs(extrusionRequired) * maxRatio, unretractPending));
+	#if DEBUG_RETRACTION_COMPENSATION > 0
+			if (extruder == 0)
+				debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, up=%03f, ler=%03f, ner=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
+	#endif
+			extrusionRequired += unretractPending;
+		}
 	}
 	else
 	{

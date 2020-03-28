@@ -332,9 +332,10 @@ void DDARing::CurrentMoveCompleted()
 		if (currentDda->IsPrintingMove())
 		{
 			auto cn = currentDda->GetClocksNeeded();
-			float extrusionRate = (currentDda->totalDistance * currentDda->directionVector[drive]) / (cn / (double)StepTimer::StepClockRate);
-			if (UsualMinimumPreparedTime > cn)
-				lastPrintingMoveExtrusionRequired[drive - numAxes] = lastPrintingMoveExtrusionRequired[drive - numAxes] * (1.0 - cn / (double)UsualMinimumPreparedTime) + cn / (double)UsualMinimumPreparedTime * extrusionRate;
+			auto accumulatorDuration = StepTimer::StepClockRate / 100;
+			auto extrusionRate = (currentDda->totalDistance * currentDda->directionVector[drive]) / (cn / (double)StepTimer::StepClockRate);
+			if (accumulatorDuration > cn)
+				lastPrintingMoveExtrusionRequired[drive - numAxes] = lastPrintingMoveExtrusionRequired[drive - numAxes] * (1.0 - cn / (double)accumulatorDuration) + cn / (double)accumulatorDuration * extrusionRate;
 			else
 				lastPrintingMoveExtrusionRequired[drive - numAxes] = extrusionRate;
 		}
