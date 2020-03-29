@@ -605,7 +605,7 @@ bool DDA::IsGoodToPrepare() const
 		if (!dda->IsPrintingMove())
 			return true;
 		totalTime += dda->clocksNeeded;
-		if (totalTime >= StepTimer::StepClockRate || ringCount >= 20)
+		if (totalTime >= StepTimer::StepClockRate * reprap.GetPlatform().GetRetractionCompensationDuration() || ringCount >= 20)
 			return true;
 		dda = dda->next;
 	}
@@ -1107,7 +1107,7 @@ inline void DDA::AdjustAcceleration()
 
 // Prepare this DDA for execution.
 // This must not be called with interrupts disabled, because it calls Platform::EnableDrive.
-void DDA::Prepare(uint8_t simMode, float extrusionPending[])
+void DDA::Prepare(uint8_t simMode, float extrusionPending[], float lastExtrusionRate[])
 {
 	if (   flags.xyMoving
 		&& reprap.GetMove().IsDRCenabled()
@@ -1358,7 +1358,7 @@ void DDA::Prepare(uint8_t simMode, float extrusionPending[])
 							speedChange = 0.0;
 						}
 
-						if (pdm->PrepareExtruder(*this, params, extrusionPending[drive - numTotalAxes], speedChange, flags.usePressureAdvance))
+						if (pdm->PrepareExtruder(*this, params, extrusionPending[drive - numTotalAxes], lastExtrusionRate[drive - numTotalAxes], speedChange, flags.usePressureAdvance))
 						{
 							// Check for sensible values, print them if they look dubious
 							if (   reprap.Debug(moduleDda)

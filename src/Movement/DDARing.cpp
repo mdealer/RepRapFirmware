@@ -64,6 +64,7 @@ void DDARing::Init2()
 	{
 		extrusionAccumulators[i] = 0;
 		extrusionPending[i] = 0.0;
+		lastExtrusionRate[i] = 0.0;
 	}
 	extrudersPrinting = false;
 	simulationTime = 0.0;
@@ -246,7 +247,7 @@ void DDARing::PrepareMoves(DDA *firstUnpreparedMove, int32_t moveTimeLeft, unsig
 #endif
 		  )
 	{
-		firstUnpreparedMove->Prepare(simulationMode, extrusionPending);
+		firstUnpreparedMove->Prepare(simulationMode, extrusionPending, lastExtrusionRate);
 		moveTimeLeft += firstUnpreparedMove->GetTimeLeft();
 		++alreadyPrepared;
 		firstUnpreparedMove = firstUnpreparedMove->GetNext();
@@ -329,16 +330,6 @@ void DDARing::CurrentMoveCompleted()
 	for (size_t drive = numAxes; drive < MaxTotalDrivers; ++drive)
 	{
 		extrusionAccumulators[drive - numAxes] += currentDda->GetStepsTaken(drive);
-		if (currentDda->IsPrintingMove())
-		{
-			auto cn = currentDda->GetClocksNeeded();
-			auto accumulatorDuration = StepTimer::StepClockRate / 100;
-			auto extrusionRate = (currentDda->totalDistance * currentDda->directionVector[drive]) / (cn / (double)StepTimer::StepClockRate);
-			if (accumulatorDuration > cn)
-				lastPrintingMoveExtrusionRequired[drive - numAxes] = lastPrintingMoveExtrusionRequired[drive - numAxes] * (1.0 - cn / (double)accumulatorDuration) + cn / (double)accumulatorDuration * extrusionRate;
-			else
-				lastPrintingMoveExtrusionRequired[drive - numAxes] = extrusionRate;
-		}
 	}
 	currentDda = nullptr;
 

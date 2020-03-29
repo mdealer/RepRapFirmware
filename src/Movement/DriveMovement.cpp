@@ -187,7 +187,7 @@ bool DriveMovement::PrepareDeltaAxis(const DDA& dda, const PrepParams& params)
 }
 #define DEBUG_RETRACTION_COMPENSATION 1
 // Prepare this DM for an extruder move, returning true if there are steps to do
-bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& extrusionPending, float speedChange, bool doCompensation)
+bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& extrusionPending, float& lastExtrusionRate, float speedChange, bool doCompensation)
 {
 	// Calculate the requested extrusion amount and a few other things
 	float &dv = dda.directionVector[drive];
@@ -207,7 +207,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		}
 	}
 #endif
-	const float moveTime = dda.clocksNeeded / (float)StepTimer::StepClockRate;
+	const float moveTime = dda.clocksNeeded * StepTimer::StepClocksToMillis;
 	float retractionComp = reprap.GetPlatform().GetRetractionCompensation();
 	// Add on any fractional extrusion pending from the previous move
 	extrusionRequired += extrusionPending;
@@ -217,27 +217,52 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		float nextExtrusionRate = 0.0;
 		size_t n = 0;
 		uint32_t totalTime = 0;
-		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional && totalTime < StepTimer::StepClockRate / 100)
+		float maxDuration = StepTimer::StepClockRate * reprap.GetPlatform().GetRetractionCompensationDuration();
+		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional)
+		{
+			++n;
+			nextDda = nextDda->next;
+		}
+		size_t maxMoves = n / 2;
+		n = 0;
+		nextDda = dda.GetNext();
+		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional && n <= maxMoves && totalTime < maxDuration)
 		{
 			++n;
 			totalTime += nextDda->clocksNeeded;
-			nextExtrusionRate = nextExtrusionRate + nextDda->totalDistance * nextDda->directionVector[drive] / (nextDda->clocksNeeded / (double)StepTimer::StepClockRate);
+			float nextMoveTime = nextDda->clocksNeeded * StepTimer::StepClocksToMillis;
+			float ddv = nextDda->totalDistance * nextDda->directionVector[drive] * 1000.0;
+			float rate = ddv / nextMoveTime;
+			if (nextExtrusionRate == 0.0)
+				nextExtrusionRate = rate;
+			else
+			{
+				float r = min<float>(1.0, nextDda->clocksNeeded / maxDuration * 4);
+				nextExtrusionRate = nextExtrusionRate * (max<float>(0.0, 1.0 - r)) + rate * min<float>(1.0, r);
+			}
 			nextDda = nextDda->next;
+#if DEBUG_RETRACTION_COMPENSATION > 0
+			if (extruder == 0)
+			{
+				debugPrintf("prepared  [%03f %03f %03f] mt=%03f, rate=%03f, ner=%03f, ddv=%03f\n", (double)nextDda->endCoordinates[0], (double)nextDda->endCoordinates[1], (double)nextDda->endCoordinates[2], (double)nextMoveTime, (double)rate, (double)nextExtrusionRate, (double)ddv);
+			}
+#endif
 		}
-		if (n)
-			nextExtrusionRate /= n;
-		float lastExtrusionRate = reprap.GetMove().GetLastPrintingMoveExtrusionRequired(extruder);
 		if (abs(nextExtrusionRate) > 0.00001 && abs(lastExtrusionRate) > 0.00001)
 		{
 			constexpr float maxRatio = 2.0;
 			float unretractPending = lastExtrusionRate > 0.01 ? (nextExtrusionRate - lastExtrusionRate) * retractionComp : 0.0;
 			unretractPending = min<float>(abs(extrusionRequired) * maxRatio, max<float>(-abs(extrusionRequired) * maxRatio, unretractPending));
-	#if DEBUG_RETRACTION_COMPENSATION > 0
+#if DEBUG_RETRACTION_COMPENSATION > 0
 			if (extruder == 0)
-				debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, up=%03f, ler=%03f, ner=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
-	#endif
+			{
+				debugPrintf("unretract [%03f %03f %03f] mt=%03f, er=%03f, up=%03f, ler=%03f, ner=%03f, ep=%03f", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)unretractPending, (double)lastExtrusionRate, (double)nextExtrusionRate, (double)extrusionPending);
+				debugPrintf(", nc=%" PRIu32 "\n", n);
+			}
+#endif
 			extrusionRequired += unretractPending;
 		}
+		lastExtrusionRate = 0.0;
 	}
 	else
 	{
@@ -255,6 +280,23 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	float compensationTime;
 	float accelCompensationDistance;
 
+	if (dda.IsPrintingMove())
+	{
+		float maxDuration = StepTimer::StepClockRate * reprap.GetPlatform().GetRetractionCompensationDuration();
+		float ddv = dda.totalDistance * dda.directionVector[drive] * 1000.0;
+		float extrusionRate = ddv / moveTime;
+		if (lastExtrusionRate != 0.0)
+		{
+			float r = min<float>(1.0, dda.clocksNeeded / maxDuration * 4);
+			lastExtrusionRate = lastExtrusionRate * (1.0 - r) + (r) * extrusionRate;
+		}
+		else
+			lastExtrusionRate = extrusionRate;
+#if DEBUG_RETRACTION_COMPENSATION > 0
+		if (extruder == 0)
+			debugPrintf("print     [%03f %03f %03f] mt=%03f, er=%03f, ler=%03f, ep=%03f, ddv=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)lastExtrusionRate, (double)extrusionPending, (double)ddv);
+#endif
+	}
 	if (doCompensation && direction)
 	{
 		// Calculate the pressure advance parameters
@@ -284,7 +326,6 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		// Calculate the acceleration phase parameters
 		mp.cart.accelStopStep = (uint32_t)(params.accelDistance * effectiveStepsPerMm) + 1;
 	}
-
 	int32_t netSteps = (int32_t)(extrusionRequired * rawStepsPerMm);
 	extrusionPending = extrusionRequired - (float)netSteps/rawStepsPerMm;
 

@@ -441,6 +441,7 @@ void Platform::Init()
 	}
 	slowDriversBitmap = 0;										// assume no drivers need extended step pulse timing
 	SetRetractionCompensation(0.0);
+	SetRetractionCompensationDuration(0.25);
 	for (size_t extr = 0; extr < MaxExtruders; ++extr)
 	{
 		extruderDrivers[extr] = (uint8_t)(extr + MinAxes);		// set up default extruder drive mapping
@@ -3975,6 +3976,12 @@ void Platform::SetRetractionCompensation(float factor)
 {
 	retractionCompensation = factor;
 }
+
+void Platform::SetRetractionCompensationDuration(float factor)
+{
+	retractionCompDuration = factor;
+}
+
 
 #if SUPPORT_NONLINEAR_EXTRUSION
 

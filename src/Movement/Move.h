@@ -138,7 +138,6 @@ public:
 
 	float GetTopSpeed() const { return mainDDARing.GetTopSpeed(); }
 	float GetRequestedSpeed() const { return mainDDARing.GetRequestedSpeed(); }
-	float GetLastPrintingMoveExtrusionRequired(size_t extruder) const { return mainDDARing.GetLastPrintingMoveExtrusionRequired(extruder); }
 
 	void AdjustLeadscrews(const floatc_t corrections[]);							// Called by some Kinematics classes to adjust the leadscrews
 

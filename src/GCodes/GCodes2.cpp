@@ -2022,12 +2022,17 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply)
 				platform.SetRetractionCompensation(gb.GetFValue());
 				seen = true;
 			}
+			if (gb.Seen('D'))
+			{
+				platform.SetRetractionCompensationDuration(gb.GetFValue());
+				seen = true;
+			}
 			if (!seen)
 			{
-				reply.printf("Retraction/un-retraction settings: length %.2f/%.2fmm, speed %d/%dmm/min, Z hop %.2fmm, compensation: %.2f",
+				reply.printf("Retraction/un-retraction settings: length %.2f/%.2fmm, speed %d/%dmm/min, Z hop %.2fmm, compensation: %.2f / %.2fs",
 					(double)retractLength, (double)(retractLength + retractExtra), (int)(retractSpeed * MinutesToSeconds),
 					(int)(unRetractSpeed * MinutesToSeconds), (double)retractHop,
-					(double)platform.GetRetractionCompensation());
+					(double)platform.GetRetractionCompensation(), (double)platform.GetRetractionCompensationDuration());
 			}
 		}
 		break;

@@ -52,7 +52,7 @@ public:
 	void SetPrevious(DDA *p) { prev = p; }
 	void Complete() { state = completed; }
 	bool Free();
-	void Prepare(uint8_t simMode, float extrusionPending[]) __attribute__ ((hot));	// Calculate all the values and freeze this DDA
+	void Prepare(uint8_t simMode, float extrusionPending[], float lastExtrusionRate[]) __attribute__ ((hot));	// Calculate all the values and freeze this DDA
 	bool HasStepError() const;
 	bool CanPauseAfter() const { return flags.canPauseAfter; }
 	bool IsPrintingMove() const { return flags.isPrintingMove; }			// Return true if this involves both XY movement and extrusion
