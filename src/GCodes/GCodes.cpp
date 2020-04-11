@@ -4536,15 +4536,23 @@ GCodeResult GCodes::RetractFilament(GCodeBuffer& gb, bool retract)
 					moveBuffer.coords[numTotalAxes + tool->Drive(i)] = -retractLength;
 				}
 				moveBuffer.feedRate = retractSpeed;
-				moveBuffer.canPauseAfter = false;			// don't pause after a retraction because that could cause too much retraction
+				moveBuffer.canPauseAfter = true;			// don't pause after a retraction because that could cause too much retraction
+				if (retractHop > 0.0)
+				{
+					moveBuffer.coords[Z_AXIS] += retractHop;
+					moveBuffer.feedRate = std::max<float>(moveBuffer.feedRate, platform.MaxFeedrate(Z_AXIS));
+				}
 				NewMoveAvailable(1);
 			}
-			if (retractHop > 0.0)
+			else if (retractHop > 0.0)
 			{
-				gb.SetState(GCodeState::doingFirmwareRetraction);
+				moveBuffer.coords[Z_AXIS] += retractHop;
+				moveBuffer.feedRate = platform.MaxFeedrate(Z_AXIS);
+				moveBuffer.canPauseAfter = true;			// don't pause after a retraction because that could cause too much retraction
+				NewMoveAvailable(1);
 			}
 		}
-		else if (retractHop > 0.0)
+		/*else if (retractHop > 0.0)
 		{
 			// Set up the reverse Z hop move
 			moveBuffer.feedRate = platform.MaxFeedrate(Z_AXIS);
@@ -4553,10 +4561,15 @@ GCodeResult GCodes::RetractFilament(GCodeBuffer& gb, bool retract)
 			moveBuffer.canPauseAfter = false;			// don't pause in the middle of a command
 			NewMoveAvailable(1);
 			gb.SetState(GCodeState::doingFirmwareUnRetraction);
-		}
+		}*/
 		else
 		{
-			// No retract hop, so just un-retract
+			if (retractHop > 0.0)
+			{
+				moveBuffer.coords[Z_AXIS] -= currentZHop;
+				currentZHop = 0.0;
+				moveBuffer.feedRate = platform.MaxFeedrate(Z_AXIS);
+			}
 			const Tool * const tool = reprap.GetCurrentTool();
 			if (tool != nullptr)
 			{
@@ -4564,7 +4577,12 @@ GCodeResult GCodes::RetractFilament(GCodeBuffer& gb, bool retract)
 				{
 					moveBuffer.coords[numTotalAxes + tool->Drive(i)] = retractLength + retractExtra;
 				}
-				moveBuffer.feedRate = unRetractSpeed;
+				moveBuffer.feedRate = retractHop > 0.0 ? std::max<float>(platform.MaxFeedrate(Z_AXIS), unRetractSpeed) : unRetractSpeed;
+				moveBuffer.canPauseAfter = true;
+				NewMoveAvailable(1);
+			}
+			else if (retractHop > 0.0)
+			{
 				moveBuffer.canPauseAfter = true;
 				NewMoveAvailable(1);
 			}
