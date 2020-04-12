@@ -210,7 +210,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	const float moveTime = dda.clocksNeeded * StepTimer::StepClocksToMillis;
 	float retractionComp = reprap.GetPlatform().GetRetractionCompensation();
 	// Add on any fractional extrusion pending from the previous move
-	//extrusionRequired += extrusionPending;
+	extrusionRequired += extrusionPending;
 	if (dda.flags.isFirmwareUnretractMove && dda.GetNext()->IsPrintingMove())
 	{
 		auto *nextDda = dda.GetNext();
@@ -278,8 +278,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	const float effectiveStepsPerMm = fabsf(dv) * rawStepsPerMm;
 
 	float compensationTime;
-	double accelCompensationDistance, compensationClocks, accelCompensationClocks, accelStopStep, twoCsquaredTimesMmPerStepDivA,
-		twoCsquaredTimesMmPerStepDivD, mmPerStepTimesCKdivtopSpeed, twoDistanceToStopTimesCsquaredDivD, decelStartStep;
+	float accelCompensationDistance;
 
 	if (dda.IsPrintingMove())
 	{
@@ -302,11 +301,12 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	{
 		// Calculate the pressure advance parameters
 		compensationTime = reprap.GetPlatform().GetPressureAdvance(extruder);
-		compensationClocks = compensationTime * (float)StepTimer::StepClockRate;
-		accelCompensationClocks = compensationClocks * params.compFactor;
+		const float compensationClocks = compensationTime * (float)StepTimer::StepClockRate;
+		mp.cart.compensationClocks = roundU32(compensationClocks);
+		mp.cart.accelCompensationClocks = roundU32(compensationClocks * params.compFactor);
 
 #ifdef COMPENSATE_SPEED_CHANGES
-		// If there is a speed change at the start of the move, theor etically we should instantly advance or retard the filament by the associated compensation amount.
+		// If there is a speed change at the start of the move, theoretically we should instantly advance or retard the filament by the associated compensation amount.
 		// We can't do that, so increase or decrease the extrusion factor instead, so that at least the extrusion will be correct by the end of the move.
 		const float factor = 1.0 + (speedChange * compensationTime)/dda.totalDistance;
 		stepsPerMm *= factor;
@@ -316,79 +316,72 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 
 		// Calculate the acceleration phase parameters
 		accelCompensationDistance = compensationTime * (dda.topSpeed - dda.startSpeed);
-		accelStopStep = ((params.accelDistance + accelCompensationDistance) * effectiveStepsPerMm) + 1;
+		mp.cart.accelStopStep = (uint32_t)((params.accelDistance + accelCompensationDistance) * effectiveStepsPerMm) + 1;
 	}
 	else
 	{
 		accelCompensationDistance = compensationTime = 0.0;
-		compensationClocks = accelCompensationClocks = 0;
+		mp.cart.compensationClocks = mp.cart.accelCompensationClocks = 0;
 
 		// Calculate the acceleration phase parameters
-		accelStopStep = (params.accelDistance * effectiveStepsPerMm) + 1;
+		mp.cart.accelStopStep = (uint32_t)(params.accelDistance * effectiveStepsPerMm) + 1;
 	}
-	double netSteps = (extrusionRequired * rawStepsPerMm);
-	//extrusionPending = extrusionRequired - (float)netSteps/rawStepsPerMm;
+	int32_t netSteps = (int32_t)(extrusionRequired * rawStepsPerMm);
+	extrusionPending = extrusionRequired - (float)netSteps/rawStepsPerMm;
+
 	if (!direction)
 	{
 		netSteps = -netSteps;
 	}
 
 	// Note, netSteps may be negative at this point if we are applying pressure advance
-	twoCsquaredTimesMmPerStepDivA = (double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.acceleration);
-	twoCsquaredTimesMmPerStepDivD = (double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.deceleration);
+	mp.cart.twoCsquaredTimesMmPerStepDivA = roundU64((double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.acceleration));
+	mp.cart.twoCsquaredTimesMmPerStepDivD = roundU64((double)(StepTimer::StepClockRateSquared * 2)/((double)effectiveStepsPerMm * (double)dda.deceleration));
 
 	// Constant speed phase parameters
-	mmPerStepTimesCKdivtopSpeed = (double)((uint64_t)StepTimer::StepClockRate * K1)/(effectiveStepsPerMm * dda.topSpeed);
+	mp.cart.mmPerStepTimesCKdivtopSpeed = (uint32_t)((float)((uint64_t)StepTimer::StepClockRate * K1)/(effectiveStepsPerMm * dda.topSpeed));
 
 	// Calculate the deceleration and reverse phase parameters and update totalSteps
 	// First check whether there is any deceleration at all, otherwise we may get strange results because of rounding errors
 	if (params.decelDistance * effectiveStepsPerMm < 0.5)		// if less than 1 deceleration step
 	{
 		totalSteps = (uint32_t)max<int32_t>(netSteps, 0);
-		decelStartStep = reverseStartStep = (uint32_t)netSteps + 1;
+		mp.cart.decelStartStep = reverseStartStep = netSteps + 1;
 		mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivD = 0;
 		twoDistanceToStopTimesCsquaredDivD = 0;
 	}
 	else
 	{
-		decelStartStep = ((params.decelStartDistance + accelCompensationDistance) * effectiveStepsPerMm);
-		const double initialDecelSpeedTimesCdivD = (int32_t)params.topSpeedTimesCdivD - compensationClocks;	// signed because it may be negative and we square it
-		const double initialDecelSpeedTimesCdivDSquared = initialDecelSpeedTimesCdivD * initialDecelSpeedTimesCdivD;
+		mp.cart.decelStartStep = (uint32_t)((params.decelStartDistance + accelCompensationDistance) * effectiveStepsPerMm) + 1;
+		const int32_t initialDecelSpeedTimesCdivD = (int32_t)params.topSpeedTimesCdivD - (int32_t)mp.cart.compensationClocks;	// signed because it may be negative and we square it
+		const uint64_t initialDecelSpeedTimesCdivDSquared = isquare64(initialDecelSpeedTimesCdivD);
 		twoDistanceToStopTimesCsquaredDivD =
-			initialDecelSpeedTimesCdivDSquared + (((params.decelStartDistance + accelCompensationDistance) * (double)(StepTimer::StepClockRateSquared * 2))/dda.deceleration);
+			initialDecelSpeedTimesCdivDSquared + roundU64(((params.decelStartDistance + accelCompensationDistance) * (float)(StepTimer::StepClockRateSquared * 2))/dda.deceleration);
 
 		// See whether there is a reverse phase
-		const double compensationSpeedChange = dda.deceleration * compensationTime;
-		const double stepsBeforeReverse = (compensationSpeedChange > dda.topSpeed)
-											? decelStartStep
-											: twoDistanceToStopTimesCsquaredDivD/twoCsquaredTimesMmPerStepDivD;
-		if (dda.endSpeed < compensationSpeedChange && stepsBeforeReverse > netSteps)
+		const float compensationSpeedChange = dda.deceleration * compensationTime;
+		const uint32_t stepsBeforeReverse = (compensationSpeedChange > dda.topSpeed)
+											? mp.cart.decelStartStep - 1
+											: twoDistanceToStopTimesCsquaredDivD/mp.cart.twoCsquaredTimesMmPerStepDivD;
+		if (dda.endSpeed < compensationSpeedChange && (int32_t)stepsBeforeReverse > netSteps)
 		{
-			reverseStartStep = (uint32_t)stepsBeforeReverse + 1;
-			totalSteps = (uint32_t)ceil((2 * stepsBeforeReverse) - netSteps);
+			reverseStartStep = stepsBeforeReverse + 1;
+			totalSteps = (uint32_t)((int32_t)(2 * stepsBeforeReverse) - netSteps);
 			mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivD =
-					(int64_t)(((2 * stepsBeforeReverse) * twoCsquaredTimesMmPerStepDivD) - twoDistanceToStopTimesCsquaredDivD);
+					(int64_t)((2 * stepsBeforeReverse) * mp.cart.twoCsquaredTimesMmPerStepDivD) - (int64_t)twoDistanceToStopTimesCsquaredDivD;
 		}
 		else
 		{
 			// There is no reverse phase. Check that we can actually do the last step requested.
-			if (netSteps > stepsBeforeReverse)
+			if (netSteps > (int32_t)stepsBeforeReverse)
 			{
-				netSteps = stepsBeforeReverse;
+				netSteps = (int32_t)stepsBeforeReverse;
 			}
-			reverseStartStep = (uint32_t)netSteps + 1;
+			reverseStartStep = netSteps + 1;
 			totalSteps = (uint32_t)max<int32_t>(netSteps, 0);
 			mp.cart.fourMaxStepDistanceMinusTwoDistanceToStopTimesCsquaredDivD = 0;
 		}
 	}
-	mp.cart.compensationClocks = round(compensationClocks);
-	mp.cart.accelCompensationClocks = round(accelCompensationClocks);
-	mp.cart.accelStopStep = round(accelStopStep);
-	mp.cart.twoCsquaredTimesMmPerStepDivA = round(twoCsquaredTimesMmPerStepDivA);
-	mp.cart.twoCsquaredTimesMmPerStepDivD = round(twoCsquaredTimesMmPerStepDivD);
-	mp.cart.mmPerStepTimesCKdivtopSpeed = round(mmPerStepTimesCKdivtopSpeed);
-	this->twoDistanceToStopTimesCsquaredDivD = round(twoDistanceToStopTimesCsquaredDivD);
-	mp.cart.decelStartStep = ceil(decelStartStep);
 
 	// Prepare for the first step
 	nextStep = 0;
