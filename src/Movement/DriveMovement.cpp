@@ -186,6 +186,7 @@ bool DriveMovement::PrepareDeltaAxis(const DDA& dda, const PrepParams& params)
 	return CalcNextStepTimeDelta(dda, false);
 }
 #define DEBUG_RETRACTION_COMPENSATION 1
+#define DEBUG_PA_SCALING 1
 // Prepare this DM for an extruder move, returning true if there are steps to do
 bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& extrusionPending, float& lastExtrusionRate, float speedChange, bool doCompensation)
 {
@@ -223,7 +224,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 			++n;
 			nextDda = nextDda->next;
 		}
-		size_t maxMoves = n / 2;
+		size_t maxMoves = n / 2; // Second half of queue is deceleration.
 		n = 0;
 		nextDda = dda.GetNext();
 		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional && n <= maxMoves && totalTime < maxDuration)
@@ -297,10 +298,26 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 			debugPrintf("print     [%03f %03f %03f] mt=%03f, er=%03f, ler=%03f, ep=%03f, ddv=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)lastExtrusionRate, (double)extrusionPending, (double)ddv);
 #endif
 	}
+	float endSpeed;
 	if (doCompensation && direction)
 	{
 		// Calculate the pressure advance parameters
 		compensationTime = reprap.GetPlatform().GetPressureAdvance(extruder);
+		float totalTime = moveTime;
+		float maxTime = 2.0 * compensationTime * 1000.0;
+		auto nextDda = dda.next;
+		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional && totalTime < maxTime)
+		{
+			totalTime += nextDda->clocksNeeded * StepTimer::StepClocksToMillis;
+			//float nextMoveTime = nextDda->clocksNeeded * StepTimer::StepClocksToMillis;
+			nextDda = nextDda->next;
+		}
+		if (totalTime > 0.0)
+			compensationTime *= min<float>(1.0, totalTime / maxTime);
+#if DEBUG_PA_SCALING > 0
+		if (extruder == 0)
+			debugPrintf("PA scale  [%03f %03f %03f] mt=%03f, ct=%03f, tt=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)compensationTime, (double)totalTime);
+#endif
 		const float compensationClocks = compensationTime * (float)StepTimer::StepClockRate;
 		mp.cart.compensationClocks = roundU32(compensationClocks);
 		mp.cart.accelCompensationClocks = roundU32(compensationClocks * params.compFactor);
@@ -311,8 +328,14 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		const float factor = 1.0 + (speedChange * compensationTime)/dda.totalDistance;
 		stepsPerMm *= factor;
 #endif
+		if (dda.GetNext()->state == DDA::provisional && dda.GetNext()->flags.isNonPrintingExtruderMove && !dda.GetNext()->flags.isFirmwareUnretractMove)
+		{
+			endSpeed = 0.0;
+		}
+		else
+			endSpeed = dda.endSpeed;
 		// Calculate the net total extrusion to allow for compensation. It may be negative.
-		extrusionRequired += (dda.endSpeed - dda.startSpeed) * compensationTime * dv;
+		extrusionRequired += (endSpeed - dda.startSpeed) * compensationTime * dv;
 
 		// Calculate the acceleration phase parameters
 		accelCompensationDistance = compensationTime * (dda.topSpeed - dda.startSpeed);
@@ -320,6 +343,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	}
 	else
 	{
+		endSpeed = dda.endSpeed;
 		accelCompensationDistance = compensationTime = 0.0;
 		mp.cart.compensationClocks = mp.cart.accelCompensationClocks = 0;
 
@@ -363,7 +387,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		const uint32_t stepsBeforeReverse = (compensationSpeedChange > dda.topSpeed)
 											? mp.cart.decelStartStep - 1
 											: twoDistanceToStopTimesCsquaredDivD/mp.cart.twoCsquaredTimesMmPerStepDivD;
-		if (dda.endSpeed < compensationSpeedChange && (int32_t)stepsBeforeReverse > netSteps)
+		if (endSpeed < compensationSpeedChange && (int32_t)stepsBeforeReverse > netSteps)
 		{
 			reverseStartStep = stepsBeforeReverse + 1;
 			totalSteps = (uint32_t)((int32_t)(2 * stepsBeforeReverse) - netSteps);
