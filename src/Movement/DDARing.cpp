@@ -13,8 +13,8 @@
 # include "CAN/CanInterface.h"
 #endif
 
-constexpr uint32_t UsualMinimumPreparedTime = StepTimer::StepClockRate/10;			// 100ms
-constexpr uint32_t AbsoluteMinimumPreparedTime = StepTimer::StepClockRate/20;		// 50ms
+constexpr uint32_t UsualMinimumPreparedTime = StepTimer::StepClockRate/1;			// 1s
+constexpr uint32_t AbsoluteMinimumPreparedTime = StepTimer::StepClockRate/10;		// 100ms
 
 DDARing::DDARing() : scheduledMoves(0), completedMoves(0)
 {

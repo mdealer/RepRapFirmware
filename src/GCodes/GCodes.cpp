@@ -168,6 +168,18 @@ void GCodes::Init()
 
 	retractLength = DefaultRetractLength;
 	retractExtra = 0.0;
+	for (float& f : paWipeRetractedAmount)
+	{
+		f = 0.0;
+	}
+	for (float& f : timeSinceLastReprime)
+	{
+		f = 0.0;
+	}
+	for (float& f : timeSinceRetractionEncountered)
+	{
+		f = 0.0;
+	}
 	retractHop = 0.0;
 	retractSpeed = unRetractSpeed = DefaultRetractSpeed * SecondsToMinutes;
 	isRetracted = false;
@@ -1496,6 +1508,7 @@ void GCodes::RunStateMachine(GCodeBuffer& gb, const StringRef& reply)
 				}
 				moveBuffer.feedRate = unRetractSpeed;
 				moveBuffer.isFirmwareRetraction = true;
+				moveBuffer.isFirmwareReprime = true;
 				moveBuffer.filePos = (&gb == fileGCode) ? gb.MachineState().fileState.GetPosition() - fileInput->BytesCached() : noFilePosition;
 				moveBuffer.canPauseAfter = true;
 				NewMoveAvailable(1);
@@ -3299,6 +3312,7 @@ void GCodes::ClearMove()
 	moveBuffer.endStopsToCheck = 0;
 	moveBuffer.moveType = 0;
 	moveBuffer.isFirmwareRetraction = false;
+	moveBuffer.isFirmwareReprime = false;
 	moveFractionToSkip = 0.0;
 }
 
@@ -4062,6 +4076,51 @@ bool GCodes::ChangeMicrostepping(size_t drive, unsigned int microsteps, bool int
 	return success;
 }
 
+void GCodes::AddTimeSinceReprime(size_t extruder, float v)
+{
+	timeSinceLastReprime[extruder] += v;
+}
+
+float GCodes::GetTimeSinceReprime(size_t extruder) const
+{
+	return timeSinceLastReprime[extruder];
+}
+
+void GCodes::ResetTimeSinceReprime(size_t extruder)
+{
+	timeSinceLastReprime[extruder] = 0.0;
+}
+
+void GCodes::AddTimeSinceRetractionEncountered(size_t extruder, float v)
+{
+	timeSinceRetractionEncountered[extruder] += v;
+}
+
+float GCodes::GetTimeSinceRetractionEncountered(size_t extruder) const
+{
+	return timeSinceRetractionEncountered[extruder];
+}
+
+void GCodes::ResetTimeSinceRetractionEncountered(size_t extruder)
+{
+	timeSinceRetractionEncountered[extruder] = 0.0;
+}
+
+void GCodes::AddPAWipeRetractedAmount(size_t extruder, float v)
+{
+	paWipeRetractedAmount[extruder] += v;
+}
+float GCodes::GetPAWipeRetractedAmount(size_t extruder)
+{
+	return paWipeRetractedAmount[extruder];
+}
+
+float GCodes::ResetPAWipeRetractedAmount(size_t extruder)
+{
+	auto oldV = paWipeRetractedAmount[extruder];
+	paWipeRetractedAmount[extruder] = 0.0;
+	return oldV;
+}
 // Set the speeds of fans mapped for the current tool to lastDefaultFanSpeed
 void GCodes::SetMappedFanSpeed(float f)
 {
@@ -4523,6 +4582,7 @@ GCodeResult GCodes::RetractFilament(GCodeBuffer& gb, bool retract)
 		reprap.GetMove().GetCurrentUserPosition(moveBuffer.coords, 0, moveBuffer.tool);
 		SetMoveBufferDefaults();
 		moveBuffer.isFirmwareRetraction = true;
+		moveBuffer.isFirmwareReprime = !retract;
 		moveBuffer.filePos = (&gb == fileGCode) ? gb.GetFilePosition(fileInput->BytesCached()) : noFilePosition;
 
 		if (retract)

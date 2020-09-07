@@ -212,7 +212,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	float retractionComp = reprap.GetPlatform().GetRetractionCompensation();
 	// Add on any fractional extrusion pending from the previous move
 	extrusionRequired += extrusionPending;
-	if (dda.flags.isFirmwareUnretractMove && dda.GetNext()->IsPrintingMove())
+	if (dda.flags.isFirmwareUnretractionMove && dda.GetNext()->IsPrintingMove())
 	{
 		auto *nextDda = dda.GetNext();
 		float nextExtrusionRate = 0.0;
@@ -254,6 +254,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 			constexpr float maxRatio = 2.0;
 			float unretractPending = lastExtrusionRate > 0.01 ? (nextExtrusionRate - lastExtrusionRate) * retractionComp : 0.0;
 			unretractPending = min<float>(abs(extrusionRequired) * maxRatio, max<float>(-abs(extrusionRequired) * maxRatio, unretractPending));
+			reprap.GetGCodes().ResetTimeSinceReprime(extruder);
 #if DEBUG_RETRACTION_COMPENSATION > 0
 			if (extruder == 0)
 			{
@@ -272,13 +273,73 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 			debugPrintf("[%03f %03f %03f] mt=%03f, er=%03f, ep=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)extrusionPending);
 #endif
 	}
+	direction = (dv >= 0.0);
+	float compensationTime = reprap.GetPlatform().GetPressureAdvance(extruder);
+	float wipeAmount = 0.0;
+	float timeSinceRetractionEncountered = 0.0;
+	float totalTimeMs = 0.0;
+	float timeSinceReprime = 0.0;
+	if (doCompensation && direction)
+	{
+		totalTimeMs = moveTime;
+		const float retractionToWipeRatio = 0.5;
+		float maxTime = (1.0 - retractionToWipeRatio) * compensationTime * 1000.0;
+		auto nextDda = dda.next;
+		size_t moveCount = 1;
+		while ((nextDda->IsPrintingMove() || !nextDda->flags.isFirmwareRetractionMove) && nextDda->state == DDA::provisional && totalTimeMs < maxTime)
+		{
+			totalTimeMs += nextDda->clocksNeeded * StepTimer::StepClocksToMillis;
+			//float nextMoveTime = nextDda->clocksNeeded * StepTimer::StepClocksToMillis;
+			++moveCount;
+			nextDda = nextDda->next;
+		}
+		if (nextDda->state == DDA::provisional && nextDda->flags.isFirmwareRetractionMove)
+		{
+			timeSinceRetractionEncountered = reprap.GetGCodes().GetTimeSinceRetractionEncountered(extruder);
+			const float currentWipe = reprap.GetGCodes().GetPAWipeRetractedAmount(extruder);
+			const float maxWipeAmount = reprap.GetGCodes().GetRetractLength() * retractionToWipeRatio;
+			if (currentWipe < maxWipeAmount && moveCount > 1)
+			{
+				float wipeT2 = 1.0 - min<float>(1.0, totalTimeMs / maxTime);
+				float wipeT1 = 1.0 - min<float>(1.0, (totalTimeMs - moveTime) / maxTime);
+				if (wipeT2 > 0.0 || wipeT1 > 0.0)
+				{
+					wipeAmount = min<float>(maxWipeAmount - currentWipe, max<float>(0.0, maxWipeAmount * (wipeT1 - wipeT2)));
+					reprap.GetGCodes().AddPAWipeRetractedAmount(extruder, wipeAmount);
+					extrusionRequired -= wipeAmount;
+				}
+			}
+			reprap.GetGCodes().AddTimeSinceRetractionEncountered(extruder, moveTime);
+		}
+		// Scale PA down based on time remaining.
+		timeSinceReprime = reprap.GetGCodes().GetTimeSinceReprime(extruder);
+		//if (totalTimeMs > 0.0)
+		//	compensationTime *= max<float>(0.0, min<float>(1.0, max<float>(timeSinceReprime, totalTimeMs) / maxTime));
+		// Calculate the pressure advance parameters
+#if DEBUG_PA_SCALING > 0
+		if (extruder == 0)
+			debugPrintf("PA scale  [%03f %03f %03f] mt=%03f, ct=%03f, tt=%03f, wa=%03f, tsr=%03f, tsre=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)compensationTime, (double)totalTimeMs, (double)wipeAmount, (double)timeSinceReprime, (double)timeSinceRetractionEncountered);
+#endif
+	}
+	else
+	{
+		if (dda.flags.isFirmwareRetractionMove)
+		{
+			reprap.GetGCodes().ResetTimeSinceRetractionEncountered(extruder);
+			auto resetVal = reprap.GetGCodes().ResetPAWipeRetractedAmount(extruder);
+			extrusionRequired += min<float>(reprap.GetGCodes().GetRetractLength(), resetVal);
+#if DEBUG_PA_SCALING > 0
+			if (extruder == 0)
+				debugPrintf("retract   [%03f %03f %03f] mt=%03f, er=%03f, rv=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)resetVal);
+#endif
+		}
+	}
 	dv = extrusionRequired/dda.totalDistance;
 	direction = (dv >= 0.0);
 
 	const float rawStepsPerMm = reprap.GetPlatform().DriveStepsPerUnit(drive);
 	const float effectiveStepsPerMm = fabsf(dv) * rawStepsPerMm;
 
-	float compensationTime;
 	float accelCompensationDistance;
 
 	if (dda.IsPrintingMove())
@@ -293,6 +354,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		}
 		else
 			lastExtrusionRate = extrusionRate;
+		reprap.GetGCodes().AddTimeSinceReprime(extruder, moveTime);
 #if DEBUG_RETRACTION_COMPENSATION > 0
 		if (extruder == 0)
 			debugPrintf("print     [%03f %03f %03f] mt=%03f, er=%03f, ler=%03f, ep=%03f, ddv=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)extrusionRequired, (double)lastExtrusionRate, (double)extrusionPending, (double)ddv);
@@ -301,23 +363,6 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 	float endSpeed;
 	if (doCompensation && direction)
 	{
-		// Calculate the pressure advance parameters
-		compensationTime = reprap.GetPlatform().GetPressureAdvance(extruder);
-		float totalTime = moveTime;
-		float maxTime = 2.0 * compensationTime * 1000.0;
-		auto nextDda = dda.next;
-		while (nextDda->IsPrintingMove() && nextDda->state == DDA::provisional && totalTime < maxTime)
-		{
-			totalTime += nextDda->clocksNeeded * StepTimer::StepClocksToMillis;
-			//float nextMoveTime = nextDda->clocksNeeded * StepTimer::StepClocksToMillis;
-			nextDda = nextDda->next;
-		}
-		if (totalTime > 0.0)
-			compensationTime *= min<float>(1.0, totalTime / maxTime);
-#if DEBUG_PA_SCALING > 0
-		if (extruder == 0)
-			debugPrintf("PA scale  [%03f %03f %03f] mt=%03f, ct=%03f, tt=%03f\n", (double)dda.endCoordinates[0], (double)dda.endCoordinates[1], (double)dda.endCoordinates[2], (double)moveTime, (double)compensationTime, (double)totalTime);
-#endif
 		const float compensationClocks = compensationTime * (float)StepTimer::StepClockRate;
 		mp.cart.compensationClocks = roundU32(compensationClocks);
 		mp.cart.accelCompensationClocks = roundU32(compensationClocks * params.compFactor);
@@ -328,7 +373,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		const float factor = 1.0 + (speedChange * compensationTime)/dda.totalDistance;
 		stepsPerMm *= factor;
 #endif
-		if (dda.GetNext()->state == DDA::provisional && dda.GetNext()->flags.isNonPrintingExtruderMove && !dda.GetNext()->flags.isFirmwareUnretractMove)
+		if (dda.GetNext()->state == DDA::provisional && dda.GetNext()->flags.isFirmwareRetractionMove)
 		{
 			endSpeed = 0.0;
 		}
@@ -380,7 +425,7 @@ bool DriveMovement::PrepareExtruder(DDA& dda, const PrepParams& params, float& e
 		const int32_t initialDecelSpeedTimesCdivD = (int32_t)params.topSpeedTimesCdivD - (int32_t)mp.cart.compensationClocks;	// signed because it may be negative and we square it
 		const uint64_t initialDecelSpeedTimesCdivDSquared = isquare64(initialDecelSpeedTimesCdivD);
 		twoDistanceToStopTimesCsquaredDivD =
-			initialDecelSpeedTimesCdivDSquared + roundU64(((params.decelStartDistance + accelCompensationDistance) * (float)(StepTimer::StepClockRateSquared * 2))/dda.deceleration);
+			initialDecelSpeedTimesCdivDSquared + roundU64(((params.decelStartDistance + (double)accelCompensationDistance) * (double)(StepTimer::StepClockRateSquared * 2))/dda.deceleration);
 
 		// See whether there is a reverse phase
 		const float compensationSpeedChange = dda.deceleration * compensationTime;

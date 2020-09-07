@@ -452,6 +452,11 @@ public:
 	float GetRetractionCompensationDuration() const;
 	void SetRetractionCompensationDuration(float factor);
 
+	void SetDynamicExtrusionTemperature(float idealRate, float scale, float tempRangeNegative, float tempRangePositive);
+	float GetExtrusionTempIdealRate() const;
+	float GetExtrusionTempScale() const;
+	float GetExtrusionTempRange(bool positive) const;
+
 	void SetEndStopConfiguration(size_t axis, EndStopPosition endstopPos, EndStopInputType inputType)
 		pre(axis < MaxAxes);
 
@@ -524,7 +529,9 @@ public:
 	bool ConfigureFan(unsigned int mcode, int fanNumber, GCodeBuffer& gb, const StringRef& reply, bool& error);
 
 	float GetFanValue(size_t fan) const;					// Result is returned in range 0..1
+	float GetRealFanValue(size_t fan) const;
 	void SetFanValue(size_t fan, float speed);				// Accepts values between 0..1
+	void SetFanOffsetValue(size_t fan, float offs);			// Accepts values between 0..1
 #if defined(DUET_06_085)
 	void EnableSharedFan(bool enable);						// enable/disable the fan that shares its PWM pin with the last heater
 #endif
@@ -749,6 +756,9 @@ private:
 	float pressureAdvance[MaxExtruders];
 	float retractionCompensation;
 	float retractionCompDuration;
+	float extrusionTempIdealRate;
+	float extrusionTempScale;
+	float extrusionTempRange[2];
 #if SUPPORT_NONLINEAR_EXTRUSION
 	float nonlinearExtrusionA[MaxExtruders], nonlinearExtrusionB[MaxExtruders], nonlinearExtrusionLimit[MaxExtruders];
 #endif

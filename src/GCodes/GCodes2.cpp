@@ -1864,6 +1864,19 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply)
 			}
 			gb.MachineState().volumetricExtrusion = (diameters[0] > 0.0);
 		}
+		else if (gb.Seen('T'))
+		{
+			float params[4] = { 0 };
+			size_t len = 4;
+			gb.GetFloatArray(params, len, false);
+			if (len != 4)
+			{
+				reply.copy("Exactly 4 parameters expected: M200 T[ideal_rate:scale:pos_temp_range:neg_temp_range]");
+				break;
+			}
+			platform.SetDynamicExtrusionTemperature(params[0], params[1], params[3], params[2]);
+			break;
+		}
 		else if (!gb.MachineState().volumetricExtrusion)
 		{
 			reply.copy("Volumetric extrusion is disabled for this input source");
@@ -1883,6 +1896,8 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply)
 					reply.catf(" %.03f", (double)(2.0/sqrtf(vef * Pi)));
 				}
 			}
+			reply.cat("\nDynamic extrusion temperature: ");
+			reply.catf(" ideal rate: %.03f mm/s, scale: %.03f, range: +%.01f -%.01f C", (double)platform.GetExtrusionTempIdealRate(), (double)platform.GetExtrusionTempScale(), (double)platform.GetExtrusionTempRange(true), (double)platform.GetExtrusionTempRange(false));
 		}
 		break;
 

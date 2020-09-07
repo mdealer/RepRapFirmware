@@ -979,7 +979,7 @@ OutputBuffer *RepRap::GetStatusResponse(uint8_t type, ResponseSource source)
 		ch = '[';
 		for (size_t i = 0; i < NUM_FANS; i++)
 		{
-			response->catf("%c%d", ch, (int)lrintf(platform->GetFanValue(i) * 100.0));
+			response->catf("%c%d", ch, (int)lrintf(platform->GetRealFanValue(i) * 100.0));
 			ch = ',';
 		}
 		response->cat((ch == '[') ? "[]" : "]");
@@ -1757,7 +1757,7 @@ OutputBuffer *RepRap::GetLegacyStatusResponse(uint8_t type, int seq)
 	response->catf(",\"fanPercent\":[%.1f", (double)(gCodes->GetMappedFanSpeed() * 100.0));
 	for (size_t i = 0; i < NUM_FANS; ++i)
 	{
-		response->catf(",%.1f", (double)(platform->GetFanValue(i) * 100.0));
+		response->catf(",%.1f", (double)(platform->GetRealFanValue(i) * 100.0));
 	}
 	response->cat(']');
 

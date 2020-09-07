@@ -131,6 +131,7 @@ public:
 		uint8_t moveType;												// the S parameter from the G0 or G1 command, 0 for a normal move
 
 		uint8_t isFirmwareRetraction : 1;								// true if this is a firmware retraction/un-retraction move
+		uint8_t isFirmwareReprime : 1;
 		uint8_t usePressureAdvance : 1;									// true if we want to us extruder pressure advance, if there is any extrusion
 		uint8_t canPauseAfter : 1;										// true if we can pause just after this move and successfully restart
 		uint8_t hasExtrusion : 1;										// true if the move includes extrusion - only valid if the move was set up by SetupMove
@@ -239,7 +240,16 @@ public:
 #if SUPPORT_WORKPLACE_COORDINATES
 	unsigned int GetWorkplaceCoordinateSystemNumber() const { return currentCoordinateSystem + 1; }
 #endif
-
+	float GetRetractLength() const { return retractLength; }
+	void AddPAWipeRetractedAmount(size_t extruder, float v);
+	float GetPAWipeRetractedAmount(size_t extruder);
+	float ResetPAWipeRetractedAmount(size_t extruder);
+	void AddTimeSinceReprime(size_t extruder, float v);
+	float GetTimeSinceReprime(size_t extruder) const;
+	void ResetTimeSinceReprime(size_t extruder);
+	void AddTimeSinceRetractionEncountered(size_t extruder, float v);
+	float GetTimeSinceRetractionEncountered(size_t extruder) const;
+	void ResetTimeSinceRetractionEncountered(size_t extruder);
 protected:
 	DECLARE_OBJECT_MODEL
 
@@ -571,6 +581,7 @@ private:
 
 	// Firmware retraction settings
 	float retractLength, retractExtra;			// retraction length and extra length to un-retract
+	float paWipeRetractedAmount[MaxExtruders], timeSinceLastReprime[MaxExtruders], timeSinceRetractionEncountered[MaxExtruders];
 	float retractSpeed;							// retract speed in mm/min
 	float unRetractSpeed;						// un=retract speed in mm/min
 	float retractHop;							// Z hop when retracting

@@ -26,11 +26,14 @@ public:
 	bool IsConfigured() const { return isConfigured && IsEnabled(); }
 
 	bool IsEnabled() const { return pin != NoPin; }
+	float GetRealPwm() const { return max<float>(0.0, min<float>(1.0, val + offsetVal)); }
+	float GetPwmOffset() const { return offsetVal; }			// returns the configured PWM. Actual PWM may be different, e.g. due to blipping or for thermostatic fans.
 	float GetConfiguredPwm() const { return val; }			// returns the configured PWM. Actual PWM may be different, e.g. due to blipping or for thermostatic fans.
 	LogicalPin GetLogicalPin() const { return logicalPin; }
 
 	void Init(Pin p_pin, LogicalPin lp, bool hwInverted, PwmFrequency p_freq);
 	void SetPwm(float speed);
+	void SetPwmOffset(float offs);
 	bool HasMonitoredHeaters() const { return heatersMonitored != 0; }
 	void SetHeatersMonitored(HeatersMonitoredBitmap h);
 	const char *GetName() const { return name.c_str(); }
@@ -41,7 +44,7 @@ public:
 
 private:
 
-	float val;
+	float val, offsetVal;
 	float lastVal;
 	float minVal;
 	float maxVal;

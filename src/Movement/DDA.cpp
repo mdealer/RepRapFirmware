@@ -12,6 +12,7 @@
 #include "StepTimer.h"
 #include "Kinematics/LinearDeltaKinematics.h"		// for DELTA_AXES
 #include "Tools/Tool.h"
+#include "Heating/Heat.h"
 
 #if SUPPORT_CAN_EXPANSION
 # include "CAN/CanInterface.h"
@@ -274,7 +275,8 @@ bool DDA::InitStandardMove(DDARing& ring, GCodes::RawMove &nextMove, bool doMoto
 	{
 		flags.isDeltaMovement = false;
 	}
-	flags.isFirmwareUnretractMove = nextMove.isFirmwareRetraction && nextMove.feedRate > 0.0;
+	flags.isFirmwareRetractionMove = nextMove.isFirmwareRetraction && !nextMove.isFirmwareReprime;
+	flags.isFirmwareUnretractionMove = nextMove.isFirmwareReprime;
 	flags.xyMoving = false;
 	bool axesMoving = false;
 	bool extruding = false;												// we set this true if extrusion was commanded, even if it is too small to do
@@ -594,7 +596,7 @@ inline bool DDA::IsAccelerationMove() const
 // Return true if there is no reason to delay preparing this move
 bool DDA::IsGoodToPrepare() const
 {
-	if (!flags.isFirmwareUnretractMove)
+	if (!flags.isFirmwareUnretractionMove)
 		return endSpeed >= topSpeed;										// if it never decelerates, we can't improve it
 	auto dda = next;
 	size_t totalTime = 0; // Need to know the speed of next N moves for dynamic unretraction
@@ -1683,6 +1685,36 @@ void DDA::CheckEndstops(Platform& platform)
 void DDA::Start(Platform& p, uint32_t tim)
 pre(state == frozen)
 {
+	auto* tool = reprap.GetCurrentOrDefaultTool();
+	const float moveTime = clocksNeeded * StepTimer::StepClocksToMillis;
+	float extrusionRate = totalDistance * directionVector[reprap.GetGCodes().GetTotalAxes()] * 1000.0 / moveTime;
+	const float idealRate = p.GetExtrusionTempIdealRate();
+	const float scale = p.GetExtrusionTempScale();
+	const float rate = extrusionRate - idealRate;
+	const float tempRange = p.GetExtrusionTempRange(rate > 0.0);
+	float tempOffs = rate * scale * tempRange;
+	for (size_t heater = 0; heater < tool->HeaterCount(); ++heater)
+	{
+		const float activeTemp = tool->GetToolHeaterActiveTemperature(heater);
+		float temp = min<float>(activeTemp + p.GetExtrusionTempRange(true), max<float>(activeTemp - p.GetExtrusionTempRange(false), activeTemp + tempOffs));
+		auto th = tool->Heater(heater);
+		const float minTemperatureLimit = reprap.GetHeat().GetLowestTemperatureLimit(th);
+		const float maxTemperatureLimit = reprap.GetHeat().GetHighestTemperatureLimit(th);
+		temp = max<float>(minTemperatureLimit, min<float>(maxTemperatureLimit, temp));
+		reprap.GetHeat().SetActiveTemperature(th, temp);
+	}
+	auto fanValue = tempOffs < 0.0 ? 0.0 : min<float>(1.0, max<float>(0.0, fabs(tempOffs) / tempRange));
+	auto fanMap = tool->GetFanMapping();
+
+	for (size_t i = 0; i < NUM_FANS; ++i)
+	{
+		if (IsBitSet(fanMap, i))
+		{
+			if (p.GetFanValue(i) > 0.0 && p.IsFanControllable(i))
+				p.SetFanOffsetValue(i, fanValue);
+		}
+	}
+
 	if ((int32_t)(tim - afterPrepare.moveStartTime ) > 25)
 	{
 		afterPrepare.moveStartTime = tim;			// this move is late starting, so record the actual start time
@@ -1843,9 +1875,17 @@ void DDA::StepDrivers(Platform& p)
 	Platform::StepDriversLow();										// set all step pins low
 
 	// If there are no more steps to do and the time for the move has nearly expired, flag the move as complete
-	if (activeDMs == nullptr && StepTimer::GetInterruptClocks() - afterPrepare.moveStartTime + WakeupTime >= clocksNeeded)
+	if (activeDMs == nullptr)
 	{
-		state = completed;
+		// We set a move as current up to MovementStartDelayClocks (about 10ms) before it is due to start.
+		// We need to make sure it has really started, or we can get arithmetic wrap round in the case that there are no local drivers stepping.
+		const uint32_t timeRunning = StepTimer::GetInterruptClocksInterruptsDisabled() - afterPrepare.moveStartTime;
+		if (   timeRunning + WakeupTime >= clocksNeeded				// if it looks like the move has almost finished
+			&& timeRunning < 0 - MovementStartDelayClocks			// and it really has started
+			)
+		{
+			state = completed;
+		}
 	}
 }
 

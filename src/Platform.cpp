@@ -173,9 +173,11 @@ Platform::Platform()
 	  nextDriveToPoll(0),
 #endif
 	  lastFanCheckTime(0), auxGCodeReply(nullptr), sysDir(nullptr), tickState(0), debugCode(0),
-	  lastWarningMillis(0), deliberateError(false)
+	  lastWarningMillis(0), deliberateError(false), extrusionTempIdealRate(1.5), extrusionTempScale(1.0)
 {
 	massStorage = new MassStorage(this);
+	extrusionTempRange[0] = 5.0;
+	extrusionTempRange[1] = 15.0;
 }
 
 //*******************************************************************************************************************
@@ -3450,6 +3452,19 @@ float Platform::GetFanValue(size_t fan) const
 	return (fan < NUM_FANS) ? fans[fan].GetConfiguredPwm() : -1;
 }
 
+float Platform::GetRealFanValue(size_t fan) const
+{
+	return (fan < NUM_FANS) ? fans[fan].GetRealPwm() : -1;
+}
+
+void Platform::SetFanOffsetValue(size_t fan, float offs)
+{
+	if (fan < NUM_FANS)
+	{
+		fans[fan].SetPwmOffset(offs);
+	}
+}
+
 void Platform::SetFanValue(size_t fan, float speed)
 {
 	if (fan < NUM_FANS)
@@ -3982,6 +3997,28 @@ void Platform::SetRetractionCompensationDuration(float factor)
 	retractionCompDuration = factor;
 }
 
+void Platform::SetDynamicExtrusionTemperature(float idealRate, float scale, float tempRangeNegative, float tempRangePositive)
+{
+	extrusionTempIdealRate = idealRate;
+	extrusionTempScale = scale;
+	extrusionTempRange[0] = tempRangeNegative;
+	extrusionTempRange[1] = tempRangePositive;
+}
+
+float Platform::GetExtrusionTempIdealRate() const
+{
+	return extrusionTempIdealRate;
+}
+
+float Platform::GetExtrusionTempScale() const
+{
+	return extrusionTempScale;
+}
+
+float Platform::GetExtrusionTempRange(bool positive) const
+{
+	return extrusionTempRange[positive ? 1 : 0];
+}
 
 #if SUPPORT_NONLINEAR_EXTRUSION
 

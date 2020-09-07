@@ -14,7 +14,7 @@
 void Fan::Init(Pin p_pin, LogicalPin lp, bool hwInverted, PwmFrequency p_freq)
 {
 	isConfigured = false;
-	val = lastVal = 0.0;
+	val = lastVal = offsetVal = 0.0;
 	minVal = 0.1;				// 10% minimum fan speed
 	maxVal = 1.0;				// 100% maximum fan speed
 	blipTime = 100;				// 100ms fan blip
@@ -212,6 +212,13 @@ void Fan::SetPwm(float speed)
 	Refresh();
 }
 
+// Set the PWM. 'offs' is in the interval 0.0..1.0.
+void Fan::SetPwmOffset(float offs)
+{
+	offsetVal = offs;
+	Refresh();
+}
+
 // Set the hardware PWM
 // If you want make sure that the PWM is definitely updated, set lastPWM negative before calling this
 void Fan::SetHardwarePwm(float pwmVal)
@@ -251,10 +258,10 @@ void Fan::Refresh()
 #if HAS_SMART_DRIVERS
 	uint32_t driverChannelsMonitored = 0;
 #endif
-
+	auto val2 = GetRealPwm();
 	if (heatersMonitored == 0)
 	{
-		reqVal = val;
+		reqVal = val2;
 	}
 	else
 	{
@@ -279,7 +286,7 @@ void Fan::Refresh()
 					const float ht = reprap.GetHeat().GetTemperature(heaterHumber, err);
 					if (err != TemperatureError::success || ht < BadLowTemperature || ht >= triggerTemperatures[1])
 					{
-						reqVal = max<float>(reqVal, (bangBangMode) ? max<float>(0.5, val) : 1.0);
+						reqVal = max<float>(reqVal, (bangBangMode) ? max<float>(0.5, val2) : 1.0);
 					}
 					else if (!bangBangMode && ht > triggerTemperatures[0])
 					{
@@ -288,7 +295,7 @@ void Fan::Refresh()
 					}
 					else if (lastVal != 0.0 && ht + ThermostatHysteresis > triggerTemperatures[0])		// if the fan is on, add a hysteresis before turning it off
 					{
-						const float minFanSpeed = (bangBangMode) ? max<float>(0.5, val) : minVal;
+						const float minFanSpeed = (bangBangMode) ? max<float>(0.5, val2) : minVal;
 						reqVal = constrain<float>(reqVal, minFanSpeed, maxVal);
 					}
 #if HAS_SMART_DRIVERS

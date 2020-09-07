@@ -28,7 +28,7 @@ constexpr unsigned int NumDms = DdaRingLength/2 * 12;								// allow enough for
 
 #elif SAM4E || SAM4S
 
-constexpr unsigned int DdaRingLength = 40;
+constexpr unsigned int DdaRingLength = 50;
 const unsigned int NumDms = DdaRingLength/2 * 8;									// suitable for e.g. a delta + 5 input hot end
 
 #else
