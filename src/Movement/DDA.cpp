@@ -1685,36 +1685,53 @@ void DDA::CheckEndstops(Platform& platform)
 void DDA::Start(Platform& p, uint32_t tim)
 pre(state == frozen)
 {
-	auto* tool = reprap.GetCurrentOrDefaultTool();
-	const float moveTime = clocksNeeded * StepTimer::StepClocksToMillis;
-	float extrusionRate = totalDistance * directionVector[reprap.GetGCodes().GetTotalAxes()] * 1000.0 / moveTime;
-	const float idealRate = p.GetExtrusionTempIdealRate();
-	const float scale = p.GetExtrusionTempScale();
-	const float rate = extrusionRate - idealRate;
-	const float tempRange = p.GetExtrusionTempRange(rate > 0.0);
-	float tempOffs = rate * scale * tempRange;
-	for (size_t heater = 0; heater < tool->HeaterCount(); ++heater)
+	if (tool != nullptr && IsPrintingMove())
 	{
-		const float activeTemp = tool->GetToolHeaterActiveTemperature(heater);
-		float temp = min<float>(activeTemp + p.GetExtrusionTempRange(true), max<float>(activeTemp - p.GetExtrusionTempRange(false), activeTemp + tempOffs));
-		auto th = tool->Heater(heater);
-		const float minTemperatureLimit = reprap.GetHeat().GetLowestTemperatureLimit(th);
-		const float maxTemperatureLimit = reprap.GetHeat().GetHighestTemperatureLimit(th);
-		temp = max<float>(minTemperatureLimit, min<float>(maxTemperatureLimit, temp));
-		reprap.GetHeat().SetActiveTemperature(th, temp);
-	}
-	auto fanValue = tempOffs < 0.0 ? 0.0 : min<float>(1.0, max<float>(0.0, fabs(tempOffs) / tempRange));
-	auto fanMap = tool->GetFanMapping();
-
-	for (size_t i = 0; i < NUM_FANS; ++i)
-	{
-		if (IsBitSet(fanMap, i))
+		const float moveTime = clocksNeeded * StepTimer::StepClocksToMillis;
+		const float idealRate = p.GetExtrusionTempIdealRate();
+		const float scale = p.GetExtrusionTempScale();
+		float avgTempOffs = 0.0, avgTempRange = 0.0;
+		size_t nActiveExtruders = 0;
+		for (size_t extruder = 0; extruder < reprap.GetGCodes().GetNumExtruders(); ++extruder)
 		{
-			if (p.GetFanValue(i) > 0.0 && p.IsFanControllable(i))
-				p.SetFanOffsetValue(i, fanValue);
+			auto drive = reprap.GetGCodes().GetTotalAxes() + extruder;
+			if (directionVector[drive] == 0.0)
+				continue;
+			float extrusionRate = totalDistance * directionVector[drive] / reprap.GetGCodes().GetVolumetricFactor(extruder) * 1000.0 / moveTime;
+			const float rate = extrusionRate - idealRate;
+			const float tempRange = p.GetExtrusionTempRange(rate > 0.0);
+			float tempOffs = rate * scale * tempRange;
+			for (size_t heater = 0; heater < tool->HeaterCount(); ++heater)
+			{
+				const float activeTemp = tool->GetToolHeaterActiveTemperature(heater);
+				float temp = min<float>(activeTemp + p.GetExtrusionTempRange(true), max<float>(activeTemp - p.GetExtrusionTempRange(false), activeTemp + tempOffs));
+				auto th = tool->Heater(heater);
+				const float minTemperatureLimit = reprap.GetHeat().GetLowestTemperatureLimit(th);
+				const float maxTemperatureLimit = reprap.GetHeat().GetHighestTemperatureLimit(th);
+				temp = max<float>(minTemperatureLimit, min<float>(maxTemperatureLimit, temp));
+				reprap.GetHeat().SetActiveTemperature(th, temp);
+			}
+			avgTempOffs += tempOffs;
+			avgTempRange += tempRange;
+			++nActiveExtruders;
+		}
+		if (nActiveExtruders != 0)
+		{
+			avgTempOffs /= nActiveExtruders;
+			avgTempRange /= nActiveExtruders;
+			auto fanValue = avgTempOffs < 0.0 ? 0.0 : min<float>(1.0, max<float>(0.0, fabs(avgTempOffs) / avgTempRange));
+			auto fanMap = tool->GetFanMapping();
+
+			for (size_t i = 0; i < NUM_FANS; ++i)
+			{
+				if (IsBitSet(fanMap, i))
+				{
+					if (p.GetFanValue(i) > 0.0 && p.IsFanControllable(i))
+						p.SetFanOffsetValue(i, fanValue);
+				}
+			}
 		}
 	}
-
 	if ((int32_t)(tim - afterPrepare.moveStartTime ) > 25)
 	{
 		afterPrepare.moveStartTime = tim;			// this move is late starting, so record the actual start time

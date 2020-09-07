@@ -173,10 +173,10 @@ Platform::Platform()
 	  nextDriveToPoll(0),
 #endif
 	  lastFanCheckTime(0), auxGCodeReply(nullptr), sysDir(nullptr), tickState(0), debugCode(0),
-	  lastWarningMillis(0), deliberateError(false), extrusionTempIdealRate(1.5), extrusionTempScale(1.0)
+	  lastWarningMillis(0), deliberateError(false), extrusionTempIdealRate(3.41), extrusionTempScale(1.0)
 {
 	massStorage = new MassStorage(this);
-	extrusionTempRange[0] = 5.0;
+	extrusionTempRange[0] = 15.0;
 	extrusionTempRange[1] = 15.0;
 }
 

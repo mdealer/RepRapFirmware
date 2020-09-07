@@ -4110,6 +4110,7 @@ void GCodes::AddPAWipeRetractedAmount(size_t extruder, float v)
 {
 	paWipeRetractedAmount[extruder] += v;
 }
+
 float GCodes::GetPAWipeRetractedAmount(size_t extruder)
 {
 	return paWipeRetractedAmount[extruder];
@@ -4120,6 +4121,11 @@ float GCodes::ResetPAWipeRetractedAmount(size_t extruder)
 	auto oldV = paWipeRetractedAmount[extruder];
 	paWipeRetractedAmount[extruder] = 0.0;
 	return oldV;
+}
+
+float GCodes::GetVolumetricFactor(size_t extruder) const
+{
+	return volumetricExtrusionFactors[extruder];
 }
 // Set the speeds of fans mapped for the current tool to lastDefaultFanSpeed
 void GCodes::SetMappedFanSpeed(float f)

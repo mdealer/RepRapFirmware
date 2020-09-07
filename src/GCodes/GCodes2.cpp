@@ -1897,7 +1897,7 @@ bool GCodes::HandleMcode(GCodeBuffer& gb, const StringRef& reply)
 				}
 			}
 			reply.cat("\nDynamic extrusion temperature: ");
-			reply.catf(" ideal rate: %.03f mm/s, scale: %.03f, range: +%.01f -%.01f C", (double)platform.GetExtrusionTempIdealRate(), (double)platform.GetExtrusionTempScale(), (double)platform.GetExtrusionTempRange(true), (double)platform.GetExtrusionTempRange(false));
+			reply.catf(" ideal rate: %.03f mm^3/s, scale: %.03f, range: +%.01f -%.01f C", (double)platform.GetExtrusionTempIdealRate(), (double)platform.GetExtrusionTempScale(), (double)platform.GetExtrusionTempRange(true), (double)platform.GetExtrusionTempRange(false));
 		}
 		break;
 

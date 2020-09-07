@@ -250,6 +250,7 @@ public:
 	void AddTimeSinceRetractionEncountered(size_t extruder, float v);
 	float GetTimeSinceRetractionEncountered(size_t extruder) const;
 	void ResetTimeSinceRetractionEncountered(size_t extruder);
+	float GetVolumetricFactor(size_t extruder) const;
 protected:
 	DECLARE_OBJECT_MODEL
 
